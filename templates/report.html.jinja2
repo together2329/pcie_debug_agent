@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UVM 에러 분석 리포트</title>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --accent-color: #e74c3c;
+            --text-color: #333;
+            --light-bg: #f5f6fa;
+            --border-color: #dcdde1;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            background-color: var(--light-bg);
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        header {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+        }
+        
+        h1, h2, h3 {
+            margin: 0;
+            color: var(--primary-color);
+        }
+        
+        .section {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+        
+        .stat-card {
+            background: var(--light-bg);
+            padding: 1rem;
+            border-radius: 4px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--secondary-color);
+        }
+        
+        .error-list {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .error-item {
+            border-left: 4px solid var(--accent-color);
+            padding: 1rem;
+            margin-bottom: 1rem;
+            background: var(--light-bg);
+        }
+        
+        .error-severity {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            font-weight: bold;
+        }
+        
+        .severity-fatal {
+            background-color: #c0392b;
+            color: white;
+        }
+        
+        .severity-error {
+            background-color: #e74c3c;
+            color: white;
+        }
+        
+        .severity-warning {
+            background-color: #f39c12;
+            color: white;
+        }
+        
+        .severity-info {
+            background-color: #3498db;
+            color: white;
+        }
+        
+        .chart-container {
+            height: 300px;
+            margin: 1rem 0;
+        }
+        
+        .analysis-section {
+            margin-top: 2rem;
+        }
+        
+        .analysis-item {
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .analysis-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .analysis-content {
+            margin-left: 1rem;
+        }
+        
+        .code-block {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 1rem;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 2rem 0;
+            color: #666;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>UVM 에러 분석 리포트</h1>
+            <p>생성일시: {{ generated_at }}</p>
+        </div>
+    </header>
+    
+    <div class="container">
+        <!-- 에러 통계 섹션 -->
+        <section class="section">
+            <h2>에러 통계</h2>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value">{{ error_stats.total }}</div>
+                    <div>총 에러 수</div>
+                </div>
+                
+                {% for severity, count in error_stats.by_severity.items() %}
+                <div class="stat-card">
+                    <div class="stat-value">{{ count }}</div>
+                    <div>{{ severity }} 에러</div>
+                </div>
+                {% endfor %}
+            </div>
+            
+            <h3>컴포넌트별 에러 분포</h3>
+            <div class="chart-container" id="componentChart"></div>
+            
+            <h3>파일별 에러 분포</h3>
+            <div class="chart-container" id="fileChart"></div>
+        </section>
+        
+        <!-- 분석 결과 섹션 -->
+        <section class="section">
+            <h2>분석 결과</h2>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value">{{ analysis_stats.total }}</div>
+                    <div>분석된 에러</div>
+                </div>
+            </div>
+            
+            <h3>근본 원인 분포</h3>
+            <div class="chart-container" id="rootCauseChart"></div>
+            
+            <div class="analysis-section">
+                {% for result in analysis_results %}
+                <div class="analysis-item">
+                    <div class="analysis-header">
+                        <h3>에러 #{{ loop.index }}</h3>
+                        <span class="error-severity severity-{{ result.error.severity|lower }}">
+                            {{ result.error.severity }}
+                        </span>
+                    </div>
+                    
+                    <div class="analysis-content">
+                        <h4>근본 원인</h4>
+                        <p>{{ result.root_cause.summary }}</p>
+                        
+                        <h4>영향받는 컴포넌트</h4>
+                        <ul>
+                            {% for component in result.component_analysis.affected_components %}
+                            <li>{{ component }}</li>
+                            {% endfor %}
+                        </ul>
+                        
+                        <h4>제안된 수정사항</h4>
+                        <ul>
+                            {% for fix in result.suggested_fixes.items %}
+                            <li>{{ fix }}</li>
+                            {% endfor %}
+                        </ul>
+                        
+                        {% if result.suggested_fixes.code_example %}
+                        <div class="code-block">
+                            <pre><code>{{ result.suggested_fixes.code_example }}</code></pre>
+                        </div>
+                        {% endif %}
+                        
+                        <h4>예방 가이드라인</h4>
+                        <ul>
+                            {% for guideline in result.prevention.guidelines %}
+                            <li>{{ guideline }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+    </div>
+    
+    <footer class="footer">
+        <div class="container">
+            <p>이 리포트는 자동으로 생성되었습니다.</p>
+        </div>
+    </footer>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // 컴포넌트별 에러 분포 차트
+        new Chart(document.getElementById('componentChart'), {
+            type: 'bar',
+            data: {
+                labels: {{ error_stats.by_component.keys()|list|tojson }},
+                datasets: [{
+                    label: '에러 수',
+                    data: {{ error_stats.by_component.values()|list|tojson }},
+                    backgroundColor: '#3498db'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+        
+        // 파일별 에러 분포 차트
+        new Chart(document.getElementById('fileChart'), {
+            type: 'bar',
+            data: {
+                labels: {{ error_stats.by_file.keys()|list|tojson }},
+                datasets: [{
+                    label: '에러 수',
+                    data: {{ error_stats.by_file.values()|list|tojson }},
+                    backgroundColor: '#e74c3c'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+        
+        // 근본 원인 분포 차트
+        new Chart(document.getElementById('rootCauseChart'), {
+            type: 'pie',
+            data: {
+                labels: {{ analysis_stats.by_root_cause.keys()|list|tojson }},
+                datasets: [{
+                    data: {{ analysis_stats.by_root_cause.values()|list|tojson }},
+                    backgroundColor: [
+                        '#3498db',
+                        '#e74c3c',
+                        '#2ecc71',
+                        '#f1c40f',
+                        '#9b59b6'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+    </script>
+</body>
+</html> 

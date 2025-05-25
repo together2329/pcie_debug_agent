@@ -1,0 +1,64 @@
+# 애플리케이션 설정
+app_name: "UVM Debug Agent"
+app_version: "1.0.0"
+environment: "development"
+
+# 로깅 설정
+log_directories:
+  - "logs/simulation"
+  - "logs/verification"
+error_patterns:
+  - pattern: "UVM_ERROR"
+    severity: "ERROR"
+  - pattern: "UVM_FATAL"
+    severity: "FATAL"
+  - pattern: "UVM_WARNING"
+    severity: "WARNING"
+  - pattern: "UVM_INFO"
+    severity: "INFO"
+
+# 임베딩 설정
+embedding:
+  model: "sentence-transformers/all-MiniLM-L6-v2"
+  batch_size: 32
+  dimension: 384
+
+# 벡터 스토어 설정
+vectorstore:
+  type: "faiss"
+  index_type: "IndexFlatIP"
+  nlist: 100
+  faiss_index_path: "data/vectorstore/faiss.index"
+
+# LLM 설정
+llm:
+  provider: "openai"
+  model: "gpt-4"
+  temperature: 0.1
+  max_tokens: 2000
+  openai_api_key: "${OPENAI_API_KEY}"
+
+# RAG 설정
+rag:
+  chunk_size: 512
+  chunk_overlap: 128
+  retrieval_top_k: 5
+  max_iterations: 3
+
+# 배치 처리 설정
+batch:
+  batch_size: 32
+  parallel_workers: 4
+
+# 알림 설정
+notifications:
+  slack_webhook_url: "${SLACK_WEBHOOK_URL}"
+  smtp:
+    host: "smtp.gmail.com"
+    port: 587
+    username: "${SMTP_USERNAME}"
+    password: "${SMTP_PASSWORD}"
+
+# 데이터 디렉토리 설정
+data_dir: "data"
+report_dir: "reports" 

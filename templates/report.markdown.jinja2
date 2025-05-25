@@ -1,0 +1,73 @@
+# UVM 에러 분석 리포트
+
+생성일시: {{ generated_at }}
+
+## 에러 통계
+
+### 전체 통계
+- 총 에러 수: {{ error_stats.total }}
+
+### 심각도별 통계
+{% for severity, count in error_stats.by_severity.items() %}
+- {{ severity }}: {{ count }}개
+{% endfor %}
+
+### 컴포넌트별 통계
+{% for component, count in error_stats.by_component.items() %}
+- {{ component }}: {{ count }}개
+{% endfor %}
+
+### 파일별 통계
+{% for file, count in error_stats.by_file.items() %}
+- {{ file }}: {{ count }}개
+{% endfor %}
+
+## 분석 결과
+
+### 전체 통계
+- 분석된 에러 수: {{ analysis_stats.total }}
+
+### 근본 원인 분포
+{% for cause, count in analysis_stats.by_root_cause.items() %}
+- {{ cause }}: {{ count }}개
+{% endfor %}
+
+### 상세 분석 결과
+{% for result in analysis_results %}
+#### 에러 #{{ loop.index }} ({{ result.error.severity }})
+
+**에러 정보**
+- 컴포넌트: {{ result.error.component }}
+- 메시지: {{ result.error.message }}
+- 파일: {{ result.error.file_path }}:{{ result.error.line_number }}
+
+**근본 원인**
+{{ result.root_cause.summary }}
+
+**영향받는 컴포넌트**
+{% for component in result.component_analysis.affected_components %}
+- {{ component }}
+{% endfor %}
+
+**제안된 수정사항**
+{% for fix in result.suggested_fixes.items %}
+- {{ fix }}
+{% endfor %}
+
+{% if result.suggested_fixes.code_example %}
+**코드 예시**
+```systemverilog
+{{ result.suggested_fixes.code_example }}
+```
+{% endif %}
+
+**예방 가이드라인**
+{% for guideline in result.prevention.guidelines %}
+- {{ guideline }}
+{% endfor %}
+
+---
+{% endfor %}
+
+---
+*이 리포트는 자동으로 생성되었습니다.* 
