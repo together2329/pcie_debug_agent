@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  uvm-debug-agent:
+    build: .
+    container_name: uvm-debug-agent
+    ports:
+      - "8502:8501"
+    volumes:
+      - ./data:/app/data
+      - ./reports:/app/reports
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    restart: unless-stopped 
