@@ -11,132 +11,158 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class UVMError:
-    """UVM 에러 데이터 구조"""
-    timestamp: str
-    severity: str  # ERROR, FATAL, WARNING
+    """Class representing a UVM error"""
+    timestamp: datetime
+    severity: str
     component: str
     message: str
     file_path: str
-    line_number: Optional[int]
-    raw_content: str
-    context_before: List[str]
-    context_after: List[str]
+    line_number: Optional[int] = None
+    context: Optional[str] = None
+    stack_trace: Optional[str] = None
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert error to dictionary"""
+        return {
+            'timestamp': self.timestamp.isoformat(),
+            'severity': self.severity,
+            'component': self.component,
+            'message': self.message,
+            'file_path': self.file_path,
+            'line_number': self.line_number,
+            'context': self.context,
+            'stack_trace': self.stack_trace
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'UVMError':
+        """Create error from dictionary"""
+        return cls(
+            timestamp=datetime.fromisoformat(data['timestamp']),
+            severity=data['severity'],
+            component=data['component'],
+            message=data['message'],
+            file_path=data['file_path'],
+            line_number=data.get('line_number'),
+            context=data.get('context'),
+            stack_trace=data.get('stack_trace')
+        )
 
 class LogCollector:
-    """로그 파일 수집 및 처리"""
+    """Collects and parses UVM simulation logs"""
     
-    def __init__(self, config: Dict[str, Any]):
-        self.log_directories = config.get('log_directories', [])
-        self.error_patterns = config.get('error_patterns', {})
-        self.context_lines = config.get('context_lines', 5)
+    # Regular expressions for parsing UVM logs
+    ERROR_PATTERNS = {
+        'timestamp': r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})',
+        'severity': r'(FATAL|ERROR|WARNING|INFO)',
+        'component': r'@(\w+):',
+        'message': r':\s*(.*?)(?=\n|$)',
+        'file_location': r'at\s+([^(]+)\((\d+)\)',
+        'stack_trace': r'(?:at\s+[^(]+\(\d+\)\n?)+'
+    }
+    
+    def __init__(self, settings: Dict[str, Any]):
+        """Initialize log collector"""
+        self.settings = settings
+        self.logger = logging.getLogger(__name__)
+    
+    def collect_logs(self, start_time: Optional[str] = None) -> List[Path]:
+        """Collect log files from configured directories"""
+        log_files = []
         
-    def collect_logs(self, 
-                     start_time: Optional[datetime] = None,
-                     file_pattern: str = "*.log") -> List[Path]:
-        """
-        지정된 디렉토리에서 로그 파일 수집
-        
-        Args:
-            start_time: 이 시간 이후 수정된 파일만 수집
-            file_pattern: 파일 패턴 (기본: *.log)
-            
-        Returns:
-            수집된 로그 파일 경로 리스트
-        """
-        collected_files = []
-        
-        for directory in self.log_directories:
-            if not os.path.exists(directory):
-                logger.warning(f"Directory not found: {directory}")
+        for log_dir in self.settings['log_directories']:
+            log_path = Path(log_dir)
+            if not log_path.exists():
+                self.logger.warning(f"Log directory does not exist: {log_dir}")
                 continue
-                
-            pattern = os.path.join(directory, "**", file_pattern)
-            files = glob.glob(pattern, recursive=True)
             
-            for file_path in files:
+            # Find all log files
+            for log_file in log_path.glob("**/*.log"):
                 if start_time:
-                    mod_time = datetime.fromtimestamp(os.path.getmtime(file_path))
-                    if mod_time < start_time:
+                    # Check file modification time
+                    mtime = datetime.fromtimestamp(log_file.stat().st_mtime)
+                    if mtime < datetime.fromisoformat(start_time):
                         continue
-                        
-                collected_files.append(Path(file_path))
-                
-        logger.info(f"Collected {len(collected_files)} log files")
-        return collected_files
+                log_files.append(log_file)
+        
+        return log_files
     
     def extract_errors(self, log_file: Path) -> List[UVMError]:
-        """
-        로그 파일에서 UVM 에러 추출
-        
-        Args:
-            log_file: 로그 파일 경로
-            
-        Returns:
-            추출된 UVM 에러 리스트
-        """
+        """Extract errors from a log file"""
         errors = []
         
         try:
-            with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
-                lines = f.readlines()
+            with open(log_file, 'r', encoding='utf-8') as f:
+                content = f.read()
             
-            for i, line in enumerate(lines):
-                for severity, pattern in self.error_patterns.items():
-                    match = re.search(pattern, line)
-                    if match:
-                        error = self._parse_error(
-                            lines, i, severity, match, str(log_file)
-                        )
-                        errors.append(error)
-                        
+            # Find all error blocks
+            error_blocks = self._find_error_blocks(content)
+            
+            for block in error_blocks:
+                error = self._parse_error_block(block, log_file)
+                if error:
+                    errors.append(error)
+        
         except Exception as e:
-            logger.error(f"Error processing file {log_file}: {e}")
-            
+            self.logger.error(f"Error processing log file {log_file}: {str(e)}")
+        
         return errors
     
-    def _parse_error(self, 
-                     lines: List[str], 
-                     line_idx: int, 
-                     severity: str,
-                     match: re.Match,
-                     file_path: str) -> UVMError:
-        """에러 상세 정보 파싱"""
-        
-        # 타임스탬프 추출
-        timestamp_match = re.search(r'(\d+\.\d+[a-z]*)', lines[line_idx])
-        timestamp = timestamp_match.group(1) if timestamp_match else "unknown"
-        
-        # 컴포넌트 추출
-        component_match = re.search(r'@\s*(\S+)', lines[line_idx])
-        component = component_match.group(1) if component_match else "unknown"
-        
-        # 에러 메시지
-        message = match.group(1).strip()
-        
-        # 파일 및 라인 정보
-        file_line_match = re.search(r'\[(\S+):(\d+)\]', lines[line_idx])
-        if file_line_match:
-            error_file = file_line_match.group(1)
-            line_number = int(file_line_match.group(2))
-        else:
-            error_file = "unknown"
-            line_number = None
+    def _find_error_blocks(self, content: str) -> List[str]:
+        """Find error blocks in log content"""
+        # Pattern to match error blocks
+        pattern = r'(?:FATAL|ERROR|WARNING|INFO).*?(?=(?:FATAL|ERROR|WARNING|INFO)|$)'
+        return re.findall(pattern, content, re.DOTALL)
+    
+    def _parse_error_block(self, block: str, log_file: Path) -> Optional[UVMError]:
+        """Parse an error block into a UVMError object"""
+        try:
+            # Extract timestamp
+            timestamp_match = re.search(self.ERROR_PATTERNS['timestamp'], block)
+            if not timestamp_match:
+                return None
+            timestamp = datetime.strptime(timestamp_match.group(1), '%Y-%m-%d %H:%M:%S')
             
-        # 컨텍스트 추출
-        start_idx = max(0, line_idx - self.context_lines)
-        end_idx = min(len(lines), line_idx + self.context_lines + 1)
+            # Extract severity
+            severity_match = re.search(self.ERROR_PATTERNS['severity'], block)
+            if not severity_match:
+                return None
+            severity = severity_match.group(1)
+            
+            # Extract component
+            component_match = re.search(self.ERROR_PATTERNS['component'], block)
+            component = component_match.group(1) if component_match else "Unknown"
+            
+            # Extract message
+            message_match = re.search(self.ERROR_PATTERNS['message'], block)
+            if not message_match:
+                return None
+            message = message_match.group(1).strip()
+            
+            # Extract file location
+            file_match = re.search(self.ERROR_PATTERNS['file_location'], block)
+            file_path = file_match.group(1).strip() if file_match else str(log_file)
+            line_number = int(file_match.group(2)) if file_match else None
+            
+            # Extract stack trace
+            stack_match = re.search(self.ERROR_PATTERNS['stack_trace'], block)
+            stack_trace = stack_match.group(0) if stack_match else None
+            
+            # Extract context (lines before the error)
+            context_lines = block.split('\n')[:3]  # Get first 3 lines as context
+            context = '\n'.join(context_lines) if context_lines else None
+            
+            return UVMError(
+                timestamp=timestamp,
+                severity=severity,
+                component=component,
+                message=message,
+                file_path=file_path,
+                line_number=line_number,
+                context=context,
+                stack_trace=stack_trace
+            )
         
-        context_before = [lines[i].strip() for i in range(start_idx, line_idx)]
-        context_after = [lines[i].strip() for i in range(line_idx + 1, end_idx)]
-        
-        return UVMError(
-            timestamp=timestamp,
-            severity=severity.upper(),
-            component=component,
-            message=message,
-            file_path=error_file,
-            line_number=line_number,
-            raw_content=lines[line_idx].strip(),
-            context_before=context_before,
-            context_after=context_after
-        ) 
+        except Exception as e:
+            self.logger.error(f"Error parsing error block: {str(e)}")
+            return None 

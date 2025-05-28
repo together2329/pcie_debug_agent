@@ -1,52 +1,167 @@
 import re
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from pathlib import Path
 import PyPDF2
 import markdown
 from bs4 import BeautifulSoup
 import logging
+from dataclasses import dataclass
+from PyPDF2 import PdfReader
 
 logger = logging.getLogger(__name__)
 
+@dataclass
 class DocumentChunk:
-    """문서 청크 데이터 구조"""
-    
-    def __init__(self, 
-                 content: str,
-                 metadata: Dict[str, Any],
-                 chunk_id: str):
-        self.content = content
-        self.metadata = metadata
-        self.chunk_id = chunk_id
-        self.embedding = None  # 나중에 임베딩 추가
-        
-    def __repr__(self):
-        return f"DocumentChunk(id={self.chunk_id}, size={len(self.content)})"
+    """Class representing a chunk of a document"""
+    content: str
+    metadata: Dict[str, Any]
+    chunk_id: str
 
 class DocumentChunker:
-    """문서를 의미 단위로 청킹"""
+    """Processes and chunks documents into smaller pieces"""
     
-    def __init__(self, 
-                 chunk_size: int = 500,
-                 chunk_overlap: int = 50,
-                 min_chunk_size: int = 100):
+    def __init__(self, chunk_size: int = 500, chunk_overlap: int = 50):
+        """Initialize document chunker"""
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
-        self.min_chunk_size = min_chunk_size
-        
-    def chunk_documents(self, doc_path: Path) -> List[DocumentChunk]:
-        """문서 타입에 따라 적절한 청킹 방법 선택"""
-        
-        if doc_path.suffix.lower() == '.pdf':
-            return self.chunk_pdf(doc_path)
-        elif doc_path.suffix.lower() in ['.md', '.markdown']:
-            return self.chunk_markdown(doc_path)
-        elif doc_path.suffix.lower() in ['.txt', '.log']:
-            return self.chunk_text(doc_path)
-        else:
-            logger.warning(f"Unsupported document type: {doc_path.suffix}")
-            return []
+        self.logger = logging.getLogger(__name__)
+    
+    def chunk_documents(self, file_path: Path) -> List[DocumentChunk]:
+        """Process and chunk a document file"""
+        try:
+            # Read file content based on file type
+            content = self._read_file(file_path)
+            if not content:
+                return []
             
+            # Extract metadata
+            metadata = self._extract_metadata(file_path, content)
+            
+            # Split content into chunks
+            chunks = self._split_into_chunks(content, metadata)
+            
+            return chunks
+        
+        except Exception as e:
+            self.logger.error(f"Error processing document {file_path}: {str(e)}")
+            return []
+    
+    def _read_file(self, file_path: Path) -> Optional[str]:
+        """Read file content based on file type"""
+        try:
+            if file_path.suffix.lower() == '.pdf':
+                return self._read_pdf(file_path)
+            elif file_path.suffix.lower() == '.md':
+                return self._read_markdown(file_path)
+            elif file_path.suffix.lower() == '.txt':
+                return self._read_text(file_path)
+            else:
+                self.logger.warning(f"Unsupported file type: {file_path.suffix}")
+                return None
+        
+        except Exception as e:
+            self.logger.error(f"Error reading file {file_path}: {str(e)}")
+            return None
+    
+    def _read_pdf(self, file_path: Path) -> str:
+        """Read PDF file content"""
+        text = []
+        with open(file_path, 'rb') as f:
+            pdf = PdfReader(f)
+            for page in pdf.pages:
+                text.append(page.extract_text())
+        return '\n'.join(text)
+    
+    def _read_markdown(self, file_path: Path) -> str:
+        """Read Markdown file content"""
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Convert markdown to HTML
+        html = markdown.markdown(content)
+        
+        # Parse HTML and extract text
+        soup = BeautifulSoup(html, 'html.parser')
+        return soup.get_text()
+    
+    def _read_text(self, file_path: Path) -> str:
+        """Read text file content"""
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    
+    def _extract_metadata(self, file_path: Path, content: str) -> Dict[str, Any]:
+        """Extract metadata from document"""
+        metadata = {
+            'file_name': file_path.name,
+            'file_type': file_path.suffix[1:],
+            'file_path': str(file_path),
+            'file_size': file_path.stat().st_size,
+            'last_modified': file_path.stat().st_mtime
+        }
+        
+        # Extract title from content
+        title_match = re.search(r'^#\s+(.+)$', content, re.MULTILINE)
+        if title_match:
+            metadata['title'] = title_match.group(1).strip()
+        
+        return metadata
+    
+    def _split_into_chunks(self, content: str, metadata: Dict[str, Any]) -> List[DocumentChunk]:
+        """Split content into overlapping chunks"""
+        chunks = []
+        
+        # Split content into sentences
+        sentences = re.split(r'(?<=[.!?])\s+', content)
+        
+        current_chunk = []
+        current_length = 0
+        
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+            
+            sentence_length = len(sentence.split())
+            
+            # If adding this sentence would exceed chunk size, create a new chunk
+            if current_length + sentence_length > self.chunk_size and current_chunk:
+                # Create chunk
+                chunk_content = ' '.join(current_chunk)
+                chunk = DocumentChunk(
+                    content=chunk_content,
+                    metadata=metadata.copy(),
+                    chunk_id=f"{metadata['file_name']}_{len(chunks)}"
+                )
+                chunks.append(chunk)
+                
+                # Keep overlap
+                overlap_words = []
+                overlap_length = 0
+                for word in reversed(current_chunk):
+                    if overlap_length + len(word.split()) <= self.chunk_overlap:
+                        overlap_words.insert(0, word)
+                        overlap_length += len(word.split())
+                    else:
+                        break
+                
+                current_chunk = overlap_words
+                current_length = overlap_length
+            
+            current_chunk.append(sentence)
+            current_length += sentence_length
+        
+        # Add the last chunk if there's any content left
+        if current_chunk:
+            chunk_content = ' '.join(current_chunk)
+            chunk = DocumentChunk(
+                content=chunk_content,
+                metadata=metadata.copy(),
+                chunk_id=f"{metadata['file_name']}_{len(chunks)}"
+            )
+            chunks.append(chunk)
+        
+        return chunks
+
     def chunk_pdf(self, pdf_path: Path) -> List[DocumentChunk]:
         """PDF 문서 청킹"""
         chunks = []

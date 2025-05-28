@@ -1,118 +1,101 @@
 # UVM Debug Agent
 
-UVM (Universal Verification Methodology) 에러 분석 및 디버깅 도구입니다. 이 도구는 UVM 시뮬레이션 로그를 분석하여 에러의 근본 원인을 파악하고, 해결 방안을 제시합니다.
+An AI-powered Universal Verification Methodology (UVM) error analysis and debugging tool that helps identify and fix errors in UVM simulation logs.
 
-## 주요 기능
+## Features
 
-- UVM 로그 파일에서 에러 자동 수집
-- SystemVerilog 코드 및 문서 분석
-- RAG (Retrieval-Augmented Generation) 기반 에러 분석
-- 상세한 분석 리포트 생성 (HTML, Markdown, YAML)
-- 에러 패턴 및 트렌드 분석
+- 🔍 **Intelligent Error Analysis**: Uses advanced AI models to analyze UVM simulation logs and identify root causes
+- 📊 **Interactive Dashboard**: Visualize error distributions, patterns, and trends
+- 🤖 **AI-Powered Recommendations**: Get suggested fixes and prevention guidelines
+- 📄 **Comprehensive Reports**: Generate detailed HTML and Markdown reports
+- 🔄 **Real-time Analysis**: Process logs as they are generated
+- 🎯 **Context-Aware**: Uses RAG (Retrieval-Augmented Generation) to provide relevant context for analysis
 
-## 설치 방법
+## Installation
 
-1. 저장소 클론:
+1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/pcie_debug_agent.git
-cd pcie_debug_agent
+git clone https://github.com/yourusername/uvm-debug-agent.git
+cd uvm-debug-agent
 ```
 
-2. Docker 이미지 빌드:
+2. Create a virtual environment and activate it:
 ```bash
-docker build -t uvm-debug-agent .
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
-3. 환경 변수 설정:
-`.env` 파일을 생성하고 다음 환경 변수들을 설정합니다:
+3. Install dependencies:
 ```bash
-OPENAI_API_KEY=your_openai_api_key_here
-SLACK_WEBHOOK_URL=your_slack_webhook_url_here
-SMTP_USERNAME=your_email@gmail.com
-SMTP_PASSWORD=your_app_specific_password_here
+pip install -r requirements.txt
 ```
 
-## 사용 방법
+4. Set up your API keys:
+Create a `.env` file in the project root and add your API keys:
+```
+OPENAI_API_KEY=your_openai_api_key
+ANTHROPIC_API_KEY=your_anthropic_api_key
+```
 
-1. 설정 파일 준비:
-`configs/settings.yaml` 파일을 프로젝트에 맞게 수정합니다.
+## Usage
 
-2. Docker 컨테이너 실행:
+1. Start the Streamlit app:
 ```bash
-docker run --env-file .env \
-  -v $(pwd)/data:/app/data \
-  -v $(pwd)/logs:/app/logs \
-  -v $(pwd)/reports:/app/reports \
-  uvm-debug-agent \
-  --config configs/settings.yaml \
-  --start-time "2024-03-20 00:00:00"
+streamlit run app.py
 ```
 
-### 명령행 옵션
+2. Open your browser and navigate to `http://localhost:8501`
 
-- `--config`: 설정 파일 경로 (기본값: configs/settings.yaml)
-- `--start-time`: 분석 시작 시간 (YYYY-MM-DD HH:MM:SS 형식)
-- `--log-level`: 로깅 레벨 (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+3. Configure the analysis settings in the sidebar:
+   - Select embedding and LLM models
+   - Configure processing parameters
+   - Set log directories
 
-## 프로젝트 구조
+4. Run the analysis:
+   - Click "Start Analysis" to begin processing
+   - View results in the dashboard
+   - Download generated reports
+
+## Project Structure
 
 ```
-pcie_debug_agent/
-├── configs/
-│   └── settings.yaml
-├── data/
-│   ├── specs/
-│   └── testbench/
+uvm-debug-agent/
+├── app.py                 # Streamlit application
+├── requirements.txt       # Project dependencies
+├── README.md             # Project documentation
 ├── src/
-│   ├── collectors/
-│   │   └── log_collector.py
-│   ├── processors/
-│   │   ├── code_chunker.py
-│   │   ├── document_chunker.py
-│   │   └── embedder.py
-│   ├── vectorstore/
-│   │   └── faiss_store.py
-│   ├── rag/
-│   │   ├── analyzer.py
-│   │   └── retriever.py
-│   ├── reports/
-│   │   └── report_generator.py
-│   └── main.py
-├── templates/
-│   ├── report.html.jinja2
-│   └── report.markdown.jinja2
-├── Dockerfile
-├── requirements.txt
-└── README.md
+│   ├── collectors/       # Log collection modules
+│   ├── processors/       # Document and code processing
+│   ├── vectorstore/      # Vector store implementation
+│   ├── rag/             # RAG components
+│   ├── reports/         # Report generation
+│   ├── models/          # Model management
+│   └── config/          # Configuration settings
+├── data/
+│   ├── specs/           # Specification documents
+│   └── testbench/       # SystemVerilog testbench files
+└── reports/             # Generated reports
 ```
 
-## 리포트 예시
+## Configuration
 
-도구는 다음 세 가지 형식의 리포트를 생성합니다:
+The application can be configured through the Streamlit interface or by modifying the configuration files:
 
-1. HTML 리포트 (`reports/report.html`)
-   - 인터랙티브 차트와 상세한 분석 결과
-   - 에러 통계 및 트렌드 시각화
+- **Model Selection**: Choose from various embedding and LLM models
+- **Processing Settings**: Configure chunk sizes, overlap, and retrieval parameters
+- **Log Directories**: Specify directories containing UVM simulation logs
+- **Advanced Settings**: Fine-tune batch sizes, parallel processing, and other parameters
 
-2. Markdown 리포트 (`reports/report.md`)
-   - 간단한 텍스트 기반 리포트
-   - 버전 관리 시스템에 적합
+## Contributing
 
-3. YAML 요약 (`reports/summary.yaml`)
-   - 핵심 통계 및 분석 결과 요약
-   - 자동화된 처리를 위한 구조화된 데이터
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-## 라이선스
+## License
 
-MIT License
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-## 기여 방법
+## Acknowledgments
 
-1. 이슈 생성 또는 기존 이슈 확인
-2. 새로운 브랜치 생성
-3. 변경사항 커밋
-4. Pull Request 생성
-
-## 문의
-
-문제나 제안사항이 있으시면 이슈를 생성해 주세요.
+- Built with [Streamlit](https://streamlit.io/)
+- Uses [FAISS](https://github.com/facebookresearch/faiss) for efficient similarity search
+- Powered by [OpenAI](https://openai.com/) and [Anthropic](https://www.anthropic.com/) models
