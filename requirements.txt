@@ -15,4 +15,5 @@ beautifulsoup4>=4.12.3
 markdown>=3.5.2
 pydantic>=2.0.0
 pydantic-settings>=2.0.0
-PyPDF2>=3.0.0 
+PyPDF2>=3.0.0
+umap-learn>=0.5.5 

@@ -11,6 +11,10 @@ import asyncio
 import threading
 import queue
 import time
+import numpy as np
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+import umap
 
 # Import your existing modules
 from src.config.settings import Settings
@@ -58,6 +62,21 @@ st.markdown("""
         border-radius: 0.5rem;
         text-align: center;
     }
+    .vector-db-stats {
+        background-color: #e3f2fd;
+        padding: 1.5rem;
+        border-radius: 0.5rem;
+        margin: 1rem 0;
+    }
+    .file-preview {
+        background-color: #f5f5f5;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        max-height: 200px;
+        overflow-y: auto;
+        font-family: monospace;
+        font-size: 0.85rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -72,6 +91,12 @@ if 'vector_store' not in st.session_state:
     st.session_state.vector_store = None
 if 'model_manager' not in st.session_state:
     st.session_state.model_manager = ModelManager()
+if 'embedding_progress' not in st.session_state:
+    st.session_state.embedding_progress = 0
+if 'embedded_chunks' not in st.session_state:
+    st.session_state.embedded_chunks = []
+if 'vector_store_stats' not in st.session_state:
+    st.session_state.vector_store_stats = {}
 
 def load_config(config_path: str) -> Settings:
     """Load configuration from YAML file"""
@@ -446,12 +471,196 @@ def display_analysis_results(analysis_results: List[Dict[str, Any]]):
             for guideline, count in prevention_counts.items():
                 st.write(f"• {guideline} ({count} occurrences)")
 
+def process_documents_for_embedding(settings_dict: Dict[str, Any], doc_paths: List[Path], code_paths: List[Path]):
+    """Process documents and code files for embedding"""
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    try:
+        # Initialize processors
+        doc_chunker = DocumentChunker(
+            chunk_size=settings_dict['rag']['chunk_size'],
+            chunk_overlap=settings_dict['rag']['chunk_overlap']
+        )
+        
+        code_chunker = SystemVerilogChunker(
+            max_chunk_size=settings_dict['rag']['chunk_size']
+        )
+        
+        # Get model manager
+        model_manager = st.session_state.model_manager
+        
+        chunks = []
+        total_files = len(doc_paths) + len(code_paths)
+        processed_files = 0
+        
+        # Process documents
+        status_text.text("📄 Processing specification documents...")
+        for doc_path in doc_paths:
+            try:
+                doc_chunks = doc_chunker.chunk_documents(doc_path)
+                chunks.extend(doc_chunks)
+                processed_files += 1
+                progress_bar.progress(processed_files / total_files * 0.5)
+                status_text.text(f"📄 Processing: {doc_path.name}")
+            except Exception as e:
+                st.warning(f"Error processing {doc_path}: {str(e)}")
+        
+        # Process code files
+        status_text.text("💻 Processing SystemVerilog code...")
+        for code_path in code_paths:
+            try:
+                code_chunks = code_chunker.chunk_sv_file(code_path)
+                chunks.extend(code_chunks)
+                processed_files += 1
+                progress_bar.progress(0.5 + (processed_files - len(doc_paths)) / total_files * 0.3)
+                status_text.text(f"💻 Processing: {code_path.name}")
+            except Exception as e:
+                st.warning(f"Error processing {code_path}: {str(e)}")
+        
+        # Generate embeddings
+        status_text.text("🧮 Generating embeddings...")
+        progress_bar.progress(0.8)
+        
+        if chunks:
+            # Generate embeddings using model manager
+            embeddings = model_manager.generate_embeddings(
+                texts=[chunk.content for chunk in chunks],
+                model_name=settings_dict['embedding']['model']
+            )
+            
+            # Create or update vector store
+            if st.session_state.vector_store is None:
+                st.session_state.vector_store = FAISSVectorStore(
+                    dimension=settings_dict['embedding']['dimension'],
+                    index_type="IndexFlatIP"
+                )
+            
+            # Add to vector store
+            st.session_state.vector_store.add_documents(
+                embeddings=embeddings,
+                documents=[chunk.content for chunk in chunks],
+                metadata=[chunk.metadata for chunk in chunks]
+            )
+            
+            # Store chunks for visualization
+            st.session_state.embedded_chunks = chunks
+            
+            # Update stats
+            st.session_state.vector_store_stats = st.session_state.vector_store.get_stats()
+            
+            progress_bar.progress(1.0)
+            status_text.text(f"✅ Successfully processed {len(chunks)} chunks from {total_files} files")
+            
+            return True, len(chunks)
+        else:
+            status_text.text("⚠️ No chunks generated from the selected files")
+            return False, 0
+            
+    except Exception as e:
+        st.error(f"Error during embedding: {str(e)}")
+        return False, 0
+
+def visualize_embeddings(embeddings: np.ndarray, metadata: List[Dict[str, Any]], method: str = "PCA"):
+    """Visualize embeddings using dimensionality reduction"""
+    if len(embeddings) == 0:
+        st.warning("No embeddings to visualize")
+        return
+    
+    # Reduce dimensions
+    if method == "PCA":
+        reducer = PCA(n_components=2)
+    elif method == "t-SNE":
+        reducer = TSNE(n_components=2, random_state=42)
+    elif method == "UMAP":
+        try:
+            reducer = umap.UMAP(n_components=2, random_state=42)
+        except:
+            st.error("UMAP not installed. Please install with: pip install umap-learn")
+            return
+    
+    # Fit and transform
+    reduced_embeddings = reducer.fit_transform(embeddings)
+    
+    # Create visualization dataframe
+    viz_data = []
+    for i, (embedding, meta) in enumerate(zip(reduced_embeddings, metadata)):
+        viz_data.append({
+            'x': embedding[0],
+            'y': embedding[1],
+            'file_type': meta.get('file_type', 'unknown'),
+            'file_name': meta.get('file_name', 'unknown'),
+            'chunk_idx': i,
+            'content_preview': str(meta.get('content', ''))[:100] + '...'
+        })
+    
+    df = pd.DataFrame(viz_data)
+    
+    # Create scatter plot
+    fig = px.scatter(
+        df,
+        x='x',
+        y='y',
+        color='file_type',
+        hover_data=['file_name', 'chunk_idx', 'content_preview'],
+        title=f'Document Embeddings Visualization ({method})',
+        labels={'x': f'{method} Component 1', 'y': f'{method} Component 2'}
+    )
+    
+    fig.update_traces(marker=dict(size=8, line=dict(width=1, color='white')))
+    fig.update_layout(height=600)
+    
+    st.plotly_chart(fig, use_container_width=True)
+
+def display_vector_store_stats():
+    """Display vector store statistics"""
+    if st.session_state.vector_store is None:
+        st.info("No vector store created yet. Please process documents first.")
+        return
+    
+    stats = st.session_state.vector_store.get_stats()
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Total Documents", stats.get('num_documents', 0))
+    
+    with col2:
+        st.metric("Embedding Dimension", stats.get('dimension', 0))
+    
+    with col3:
+        st.metric("Index Type", stats.get('index_type', 'N/A'))
+    
+    with col4:
+        st.metric("Total Vectors", stats.get('total_size', 0))
+    
+    # Document type distribution
+    if st.session_state.embedded_chunks:
+        st.subheader("Document Type Distribution")
+        
+        type_counts = {}
+        for chunk in st.session_state.embedded_chunks:
+            file_type = chunk.metadata.get('file_type', 'unknown')
+            type_counts[file_type] = type_counts.get(file_type, 0) + 1
+        
+        fig = px.pie(
+            values=list(type_counts.values()),
+            names=list(type_counts.keys()),
+            title="Chunks by File Type"
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
 def run_analysis(settings_dict: Dict[str, Any], start_time: Optional[str] = None):
     """Run the analysis with progress tracking"""
     progress_bar = st.progress(0)
     status_text = st.empty()
     
     try:
+        # Check if vector store exists
+        if st.session_state.vector_store is None:
+            st.error("Please setup embeddings first in the 'Embedding Setup' tab")
+            return False, "No vector store available"
+        
         # Step 1: Collect errors
         status_text.text("📂 Collecting error logs...")
         progress_bar.progress(10)
@@ -469,77 +678,15 @@ def run_analysis(settings_dict: Dict[str, Any], start_time: Optional[str] = None
         
         st.session_state.errors = errors
         status_text.text(f"✅ Collected {len(errors)} errors")
-        progress_bar.progress(30)
-        
-        # Step 2: Process documents
-        status_text.text("📄 Processing documents and code...")
         progress_bar.progress(40)
         
-        # Initialize processors
-        doc_chunker = DocumentChunker(
-            chunk_size=settings_dict['rag']['chunk_size'],
-            chunk_overlap=settings_dict['rag']['chunk_overlap']
-        )
-        
-        code_chunker = SystemVerilogChunker(
-            max_chunk_size=settings_dict['rag']['chunk_size']
-        )
-        
-        # Get model manager
-        model_manager = st.session_state.model_manager
-        
-        # Process documents
-        chunks = []
-        data_dir = Path("data")
-        
-        # Process specs
-        for spec_file in data_dir.glob("specs/**/*"):
-            if spec_file.suffix in ['.pdf', '.md', '.txt']:
-                doc_chunks = doc_chunker.chunk_documents(spec_file)
-                chunks.extend(doc_chunks)
-        
-        # Process code
-        for code_file in data_dir.glob("testbench/**/*.sv"):
-            code_chunks = code_chunker.chunk_sv_file(code_file)
-            chunks.extend(code_chunks)
-        
-        status_text.text(f"✅ Processed {len(chunks)} document chunks")
+        # Step 2: Analyze errors using existing vector store
+        status_text.text("🤖 Analyzing errors with AI...")
         progress_bar.progress(50)
         
-        # Step 3: Generate embeddings
-        status_text.text("🧮 Generating embeddings...")
-        progress_bar.progress(60)
-        
-        # Generate embeddings using model manager
-        embeddings = model_manager.generate_embeddings(
-            texts=[chunk.content for chunk in chunks],
-            model_name=settings_dict['embedding']['model']
-        )
-        
-        # Step 4: Create vector store
-        status_text.text("💾 Creating vector store...")
-        progress_bar.progress(70)
-        
-        vector_store = FAISSVectorStore(
-            dimension=settings_dict['embedding']['dimension'],
-            index_type="IndexFlatIP"
-        )
-        
-        vector_store.add_documents(
-            embeddings=embeddings,
-            documents=[chunk.content for chunk in chunks],
-            metadata=[chunk.metadata for chunk in chunks]
-        )
-        
-        st.session_state.vector_store = vector_store
-        
-        # Step 5: Analyze errors
-        status_text.text("🤖 Analyzing errors with AI...")
-        progress_bar.progress(80)
-        
         retriever = Retriever(
-            vector_store=vector_store,
-            embedder=model_manager
+            vector_store=st.session_state.vector_store,
+            embedder=st.session_state.model_manager
         )
         
         analyzer = Analyzer(
@@ -553,7 +700,7 @@ def run_analysis(settings_dict: Dict[str, Any], start_time: Optional[str] = None
         analysis_results = []
         for i, error in enumerate(errors):
             # Update progress
-            progress = 80 + int((i / len(errors)) * 15)
+            progress = 50 + int((i / len(errors)) * 40)
             progress_bar.progress(progress)
             status_text.text(f"🤖 Analyzing error {i+1}/{len(errors)}...")
             
@@ -569,7 +716,7 @@ def run_analysis(settings_dict: Dict[str, Any], start_time: Optional[str] = None
         
         st.session_state.analysis_results = analysis_results
         
-        # Step 6: Generate reports
+        # Step 3: Generate reports
         status_text.text("📊 Generating reports...")
         progress_bar.progress(95)
         
@@ -616,23 +763,283 @@ def main():
     settings_dict = create_sidebar()
     
     # Main content area
-    tab1, tab2, tab3, tab4 = st.tabs(["🏠 Dashboard", "🔍 Analysis", "📊 Results", "📄 Reports"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["🏠 Dashboard", "📚 Embedding Setup", "🔍 Analysis", "📊 Results", "📄 Reports"])
     
     with tab1:
         st.header("Dashboard")
         
+        # Vector Store Stats
+        st.subheader("Vector Store Status")
+        display_vector_store_stats()
+        
         # Quick stats
         if st.session_state.errors:
+            st.subheader("Error Analysis Status")
             display_metrics(st.session_state.errors, st.session_state.analysis_results or [])
             
             # Error distribution charts
             st.header("Error Distribution")
             create_error_distribution_charts(st.session_state.errors)
         else:
-            st.info("No analysis data available. Run an analysis to see results.")
+            st.info("No analysis data available. First setup embeddings, then run an analysis to see results.")
     
     with tab2:
+        st.header("📚 Document Embedding Setup")
+        st.markdown("Configure and process documents for the knowledge base")
+        
+        # Document selection
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("📄 Specification Documents")
+            doc_dir = st.text_input(
+                "Specification Directory",
+                value="data/specs",
+                help="Directory containing UVM specification documents"
+            )
+            
+            doc_extensions = st.multiselect(
+                "Document File Types",
+                options=['.pdf', '.md', '.txt', '.docx'],
+                default=['.pdf', '.md', '.txt'],
+                help="Select file types to process"
+            )
+            
+            # Preview documents
+            if st.button("🔍 Preview Documents", key="preview_docs"):
+                doc_path = Path(doc_dir)
+                if doc_path.exists():
+                    doc_files = []
+                    for ext in doc_extensions:
+                        doc_files.extend(doc_path.glob(f"**/*{ext}"))
+                    
+                    if doc_files:
+                        st.success(f"Found {len(doc_files)} document files")
+                        with st.expander("Document Files", expanded=True):
+                            for file in doc_files[:10]:  # Show first 10
+                                st.text(f"📄 {file.relative_to(doc_path)}")
+                    else:
+                        st.warning("No documents found with selected extensions")
+                else:
+                    st.error(f"Directory not found: {doc_dir}")
+        
+        with col2:
+            st.subheader("💻 SystemVerilog Code")
+            code_dir = st.text_input(
+                "Testbench Directory",
+                value="data/testbench",
+                help="Directory containing SystemVerilog testbench files"
+            )
+            
+            code_extensions = st.multiselect(
+                "Code File Types",
+                options=['.sv', '.svh', '.v', '.vh'],
+                default=['.sv', '.svh'],
+                help="Select code file types to process"
+            )
+            
+            # Preview code files
+            if st.button("🔍 Preview Code Files", key="preview_code"):
+                code_path = Path(code_dir)
+                if code_path.exists():
+                    code_files = []
+                    for ext in code_extensions:
+                        code_files.extend(code_path.glob(f"**/*{ext}"))
+                    
+                    if code_files:
+                        st.success(f"Found {len(code_files)} code files")
+                        with st.expander("Code Files", expanded=True):
+                            for file in code_files[:10]:  # Show first 10
+                                st.text(f"💻 {file.relative_to(code_path)}")
+                    else:
+                        st.warning("No code files found with selected extensions")
+                else:
+                        st.error(f"Directory not found: {code_dir}")
+        
+        st.markdown("---")
+        
+        # Embedding configuration
+        st.subheader("🔧 Embedding Configuration")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            chunk_method = st.selectbox(
+                "Chunking Method",
+                options=["Fixed Size", "Sentence-based", "Semantic"],
+                help="Method for splitting documents into chunks"
+            )
+        
+        with col2:
+            min_chunk_size = st.number_input(
+                "Min Chunk Size",
+                min_value=50,
+                max_value=500,
+                value=100,
+                help="Minimum size for a chunk"
+            )
+        
+        with col3:
+            embedding_batch = st.number_input(
+                "Embedding Batch Size",
+                min_value=1,
+                max_value=100,
+                value=32,
+                help="Number of chunks to process at once"
+            )
+        
+        # Process button
+        if st.button("🚀 Process Documents and Generate Embeddings", type="primary", use_container_width=True):
+            # Collect files
+            doc_path = Path(doc_dir)
+            code_path = Path(code_dir)
+            
+            doc_files = []
+            code_files = []
+            
+            if doc_path.exists():
+                for ext in doc_extensions:
+                    doc_files.extend(doc_path.glob(f"**/*{ext}"))
+            
+            if code_path.exists():
+                for ext in code_extensions:
+                    code_files.extend(code_path.glob(f"**/*{ext}"))
+            
+            if doc_files or code_files:
+                success, num_chunks = process_documents_for_embedding(
+                    settings_dict,
+                    doc_files,
+                    code_files
+                )
+                
+                if success:
+                    st.success(f"✅ Successfully processed {num_chunks} chunks")
+                    st.balloons()
+                else:
+                    st.error("Failed to process documents")
+            else:
+                st.error("No files found to process")
+        
+        # Vector Store Management
+        st.markdown("---")
+        st.subheader("💾 Vector Store Management")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button("💾 Save Vector Store"):
+                if st.session_state.vector_store:
+                    try:
+                        save_path = Path("data/vectorstore")
+                        st.session_state.vector_store.save(str(save_path))
+                        st.success(f"Vector store saved to {save_path}")
+                    except Exception as e:
+                        st.error(f"Error saving vector store: {str(e)}")
+                else:
+                    st.warning("No vector store to save")
+        
+        with col2:
+            if st.button("📂 Load Vector Store"):
+                try:
+                    load_path = Path("data/vectorstore")
+                    if load_path.exists():
+                        st.session_state.vector_store = FAISSVectorStore.load(str(load_path))
+                        st.session_state.vector_store_stats = st.session_state.vector_store.get_stats()
+                        st.success("Vector store loaded successfully")
+                    else:
+                        st.error(f"Vector store not found at {load_path}")
+                except Exception as e:
+                    st.error(f"Error loading vector store: {str(e)}")
+        
+        with col3:
+            if st.button("🗑️ Clear Vector Store"):
+                if st.session_state.vector_store:
+                    st.session_state.vector_store.clear()
+                    st.session_state.embedded_chunks = []
+                    st.session_state.vector_store_stats = {}
+                    st.success("Vector store cleared")
+                else:
+                    st.info("No vector store to clear")
+        
+        # Embedding Visualization
+        if st.session_state.vector_store and st.session_state.embedded_chunks:
+            st.markdown("---")
+            st.subheader("📊 Embedding Visualization")
+            
+            col1, col2 = st.columns([1, 3])
+            
+            with col1:
+                viz_method = st.selectbox(
+                    "Visualization Method",
+                    options=["PCA", "t-SNE", "UMAP"],
+                    help="Method for reducing dimensions"
+                )
+                
+                if st.button("🎨 Visualize Embeddings"):
+                    with col2:
+                        with st.spinner(f"Generating {viz_method} visualization..."):
+                            # Get embeddings from chunks
+                            embeddings = []
+                            metadata = []
+                            
+                            # Generate embeddings for visualization
+                            model_manager = st.session_state.model_manager
+                            chunk_texts = [chunk.content for chunk in st.session_state.embedded_chunks[:1000]]  # Limit to 1000
+                            
+                            embeddings = model_manager.generate_embeddings(
+                                texts=chunk_texts,
+                                model_name=settings_dict['embedding']['model']
+                            )
+                            
+                            metadata = [chunk.metadata for chunk in st.session_state.embedded_chunks[:1000]]
+                            
+                            visualize_embeddings(embeddings, metadata, viz_method)
+            
+            # Search in Vector Store
+            st.markdown("---")
+            st.subheader("🔍 Test Vector Store Search")
+            
+            test_query = st.text_input(
+                "Test Query",
+                placeholder="Enter a test query to search the vector store...",
+                help="Test the retrieval capability of your vector store"
+            )
+            
+            if test_query:
+                if st.button("Search"):
+                    with st.spinner("Searching..."):
+                        retriever = Retriever(
+                            vector_store=st.session_state.vector_store,
+                            embedder=st.session_state.model_manager
+                        )
+                        
+                        results = retriever.retrieve(
+                            query=test_query,
+                            k=5
+                        )
+                        
+                        if results:
+                            st.success(f"Found {len(results)} relevant documents")
+                            
+                            for i, result in enumerate(results):
+                                with st.expander(f"Result {i+1} (Score: {result['score']:.3f})"):
+                                    st.markdown("**Metadata:**")
+                                    st.json(result['metadata'])
+                                    st.markdown("**Content Preview:**")
+                                    st.text(result['content'][:500] + "...")
+                        else:
+                            st.warning("No results found")
+    
+    with tab3:
         st.header("Run Analysis")
+        
+        # Check if embeddings are ready
+        if st.session_state.vector_store is None:
+            st.warning("⚠️ Please setup document embeddings first in the 'Embedding Setup' tab before running analysis.")
+            st.stop()
+        
+        # Analysis Configuration
+        st.subheader("🔧 Analysis Configuration")
         
         col1, col2 = st.columns([3, 1])
         
@@ -660,8 +1067,52 @@ def main():
                 st.session_state.clear()
                 st.success("Cache cleared!")
         
-        # Run analysis button
-        if st.button("🚀 Start Analysis", type="primary", use_container_width=True):
+        # Show current vector store status
+        if st.session_state.vector_store:
+            stats = st.session_state.vector_store_stats
+            st.info(f"📚 Vector Store Ready: {stats.get('num_documents', 0)} documents indexed")
+        
+        # Analysis Settings
+        st.subheader("⚙️ Analysis Settings")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            analysis_depth = st.select_slider(
+                "Analysis Depth",
+                options=["Basic", "Standard", "Detailed", "Comprehensive"],
+                value="Standard",
+                help="Level of detail in error analysis"
+            )
+            
+            include_suggestions = st.checkbox(
+                "Include Fix Suggestions",
+                value=True,
+                help="Generate suggested fixes for each error"
+            )
+        
+        with col2:
+            include_prevention = st.checkbox(
+                "Include Prevention Guidelines",
+                value=True,
+                help="Generate prevention guidelines for each error type"
+            )
+            
+            generate_reports = st.checkbox(
+                "Generate Reports",
+                value=True,
+                help="Generate HTML and Markdown reports"
+            )
+        
+        # Display current configuration
+        with st.expander("Current Configuration", expanded=False):
+            st.json(settings_dict)
+        
+        # Analysis Execution
+        st.markdown("---")
+        st.subheader("🚀 Execute Analysis")
+        
+        if st.button("Start Analysis", type="primary", use_container_width=True):
             # Validate settings
             if settings_dict['llm']['provider'] == 'openai' and not settings_dict['llm']['openai_api_key']:
                 st.error("Please provide OpenAI API key in the sidebar")
@@ -679,12 +1130,8 @@ def main():
                     st.balloons()
                 else:
                     st.error(message)
-        
-        # Display current configuration
-        with st.expander("Current Configuration", expanded=False):
-            st.json(settings_dict)
     
-    with tab3:
+    with tab4:
         st.header("Analysis Results")
         
         if st.session_state.analysis_results:
@@ -692,7 +1139,7 @@ def main():
         else:
             st.info("No analysis results available. Run an analysis first.")
     
-    with tab4:
+    with tab5:
         st.header("Generated Reports")
         
         report_dir = Path("reports")
