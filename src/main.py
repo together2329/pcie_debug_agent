@@ -80,12 +80,13 @@ def process_documents(settings: Settings) -> List[Dict[str, Any]]:
                 logger.error(f"Error processing spec file {spec_file}: {e}")
     
     # 코드 파일 처리
-    for code_file in Path(settings.data_dir).glob("testbench/**/*.sv"):
-        try:
-            code_chunks = code_chunker.chunk_sv_file(code_file)
-            chunks.extend(code_chunks)
-        except Exception as e:
-            logger.error(f"Error processing code file {code_file}: {e}")
+    for code_file in Path(settings.data_dir).glob("testbench/**/*"):
+        if code_file.suffix in ['.sv', '.svh', '.v', '.list']:
+            try:
+                code_chunks = code_chunker.chunk_sv_file(code_file)
+                chunks.extend(code_chunks)
+            except Exception as e:
+                logger.error(f"Error processing code file {code_file}: {e}")
     
     # 임베딩 생성
     embedder.embed_chunks(chunks)
