@@ -322,8 +322,9 @@ You are a helpful AI assistant specialized in PCIe debugging and analysis. Provi
             "metal_support": platform.machine() == "arm64" and platform.system() == "Darwin"
         }
         
-        # Check if sufficient memory
+        # Check if sufficient memory (more realistic threshold)
         min_memory_gb = min(LocalLLMProvider.get_memory_requirements().values())
-        system_info["sufficient_memory"] = system_info["available_memory_gb"] > min_memory_gb * 1.5
+        # Use 1.2x multiplier instead of 1.5x for more realistic memory check
+        system_info["sufficient_memory"] = system_info["available_memory_gb"] > min_memory_gb * 1.2
         
         return system_info

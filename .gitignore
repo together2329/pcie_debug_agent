@@ -63,4 +63,10 @@ fix_*.py
 
 # Local development files
 sample_logs/
-temp_*/ 
+temp_*/
+
+# Local LLM models (large files)
+models/
+*.gguf
+*.bin
+*.safetensors 
