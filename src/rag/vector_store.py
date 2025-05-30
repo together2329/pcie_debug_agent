@@ -40,15 +40,23 @@ class FAISSVectorStore:
             # 인덱스 파일이 존재하는 경우 로드
             if Path(self.index_path).exists():
                 with open(self.index_path, 'rb') as f:
-                    self.index = faiss.deserialize_index(f.read())
+                    data = pickle.load(f)
+                    if isinstance(data, dict):
+                        self.index = data.get('index')
+                        self.metadata = data.get('metadata', [])
+                    else:
+                        # 구버전 호환성 - faiss.deserialize_index 시도
+                        self.index = faiss.deserialize_index(data)
             else:
                 # 인덱스 파일이 없는 경우 새로 생성
-                self.index = faiss.IndexFlatIP(self.dimension)
+                if self.index_type == "L2":
+                    self.index = faiss.IndexFlatL2(self.dimension)
+                else:  # IP (Inner Product)
+                    self.index = faiss.IndexFlatIP(self.dimension)
                 # 부모 디렉토리 생성
                 Path(self.index_path).parent.mkdir(parents=True, exist_ok=True)
                 # 인덱스 저장
-                with open(self.index_path, 'wb') as f:
-                    f.write(faiss.serialize_index(self.index))
+                self._save_index()
         except Exception as e:
             logger.error(f"인덱스 로드/생성 실패: {str(e)}")
             raise
@@ -72,6 +80,11 @@ class FAISSVectorStore:
         
         # 문서 추가
         self.index.add(embeddings)
+        
+        # 메타데이터에 문서 내용 포함
+        for i, doc in enumerate(documents):
+            metadata[i]['content'] = doc
+        
         self.metadata.extend(metadata)
         
         # 인덱스 저장

@@ -8,7 +8,6 @@ import logging
 from dataclasses import dataclass
 import torch
 from sentence_transformers import SentenceTransformer
-import openai
 from anthropic import Anthropic
 import numpy as np
 
@@ -213,8 +212,8 @@ class LLMModelManager:
         if provider == "openai":
             if not api_key:
                 raise ValueError("OpenAI API key required")
-            openai.api_key = api_key
-            self._clients["openai"] = openai
+            from openai import OpenAI
+            self._clients["openai"] = OpenAI(api_key=api_key)
             
         elif provider == "anthropic":
             if not api_key:
@@ -250,7 +249,8 @@ class LLMModelManager:
             
         try:
             if provider == "openai":
-                response = openai.ChatCompletion.create(
+                client = self._clients["openai"]
+                response = client.chat.completions.create(
                     model=model,
                     messages=[
                         {"role": "system", "content": "You are a UVM verification expert."},

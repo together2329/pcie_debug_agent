@@ -6,12 +6,12 @@ from pathlib import Path
 from typing import Optional
 
 from src.cli.utils.output import (
-    console, print_error, print_success, print_info,
+    console, print_error, print_success, print_info, print_warning,
     print_analysis_result, create_progress_bar
 )
-from src.rag.enhanced_rag_engine import EnhancedRAGEngine
+from src.rag.enhanced_rag_engine import EnhancedRAGEngine, RAGQuery
 from src.rag.vector_store import FAISSVectorStore
-from src.rag.model_manager import ModelManager
+from src.models.model_manager import ModelManager
 
 
 @click.command()
@@ -87,35 +87,43 @@ def analyze(
             
             # Vector store
             vector_store = FAISSVectorStore(
-                index_path=settings.vector_store_path,
-                index_type=settings.index_type,
-                dimension=settings.embedding_dimension
+                index_path=settings.vector_store.index_path,
+                index_type=settings.vector_store.index_type,
+                dimension=settings.vector_store.dimension
             )
             progress.update(task, advance=1)
             
             # Model manager
-            model_manager = ModelManager(
-                embedding_model=settings.embedding_model,
-                embedding_provider=settings.embedding_provider,
-                embedding_api_key=settings.embedding_config.api_key,
-                embedding_api_base_url=settings.embedding_config.api_base_url,
-                llm_provider=settings.llm_provider,
-                llm_model=model or settings.llm_model,
-                llm_api_key=settings.llm_config.api_key,
-                llm_api_base_url=settings.llm_config.api_base_url
-            )
+            model_manager = ModelManager()
+            
+            # Load embedding model for local provider
+            if settings.embedding.provider == "local":
+                model_manager.load_embedding_model(settings.embedding.model)
+            
+            # Initialize LLM if available
+            llm_available = False
+            if settings.llm.provider and settings.llm.api_key and settings.llm.api_key != "${LLM_API_KEY}":
+                try:
+                    model_manager.initialize_llm(
+                        provider=settings.llm.provider,
+                        api_key=settings.llm.api_key
+                    )
+                    llm_available = True
+                except Exception as e:
+                    print_warning(f"Could not initialize LLM: {e}")
+            
+            if not llm_available:
+                print_warning("No LLM configured - analysis will use vector search only")
             progress.update(task, advance=1)
             
             # RAG engine
             engine = EnhancedRAGEngine(
                 vector_store=vector_store,
                 model_manager=model_manager,
-                llm_provider=settings.llm_provider,
-                llm_model=model or settings.llm_model,
+                llm_provider=settings.llm.provider,
+                llm_model=model or settings.llm.model,
                 temperature=0.1,
-                max_tokens=2000,
-                context_window=context_window,
-                enable_cache=not no_cache
+                max_tokens=2000
             )
             progress.update(task, advance=1)
         
@@ -125,10 +133,12 @@ def analyze(
         with create_progress_bar("Performing analysis") as progress:
             task = progress.add_task("Searching and analyzing...", total=None)
             
-            result = engine.query(
+            rag_query = RAGQuery(
                 query=query,
-                min_confidence=confidence
+                context_window=context_window,
+                min_similarity=confidence/2  # Convert confidence to similarity threshold
             )
+            result = engine.query(rag_query)
             
             progress.update(task, completed=True)
         
@@ -142,7 +152,14 @@ def analyze(
         # Output results
         if output == "json":
             import json
-            console.print(json.dumps(result.to_dict(), indent=2))
+            result_dict = {
+                "answer": result.answer,
+                "confidence": result.confidence,
+                "sources": result.sources,
+                "reasoning": result.reasoning,
+                "metadata": result.metadata
+            }
+            console.print(json.dumps(result_dict, indent=2, default=str))
         elif output == "markdown":
             # Format as markdown
             md_output = f"# Analysis Result\n\n"
@@ -158,7 +175,14 @@ def analyze(
             console.print(md_output)
         else:
             # Default text output
-            print_analysis_result(result.to_dict())
+            result_dict = {
+                "answer": result.answer,
+                "confidence": result.confidence,
+                "sources": result.sources,
+                "reasoning": result.reasoning,
+                "metadata": result.metadata
+            }
+            print_analysis_result(result_dict)
         
         # Show cache statistics if verbose
         if verbose and not no_cache:

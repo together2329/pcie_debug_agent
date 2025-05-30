@@ -115,10 +115,8 @@ def mock_model_manager() -> Mock:
     manager = Mock(spec=ModelManager)
     
     # Mock embedding generation
-    manager.embed_text.return_value = np.random.rand(384).astype(np.float32)
-    manager.embed_texts.return_value = [
-        np.random.rand(384).astype(np.float32) for _ in range(5)
-    ]
+    manager.generate_embeddings.return_value = np.random.rand(5, 384).astype(np.float32)
+    manager.generate_completion.return_value = "Test completion response"
     
     # Mock model info
     manager.embedding_model = "test-embedding-model"

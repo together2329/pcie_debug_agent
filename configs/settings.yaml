@@ -12,11 +12,11 @@ report_dir: "reports"
 
 # 임베딩 설정
 embedding:
-  model: "text-embedding-3-small"
-  provider: "openai"
+  model: "sentence-transformers/all-MiniLM-L6-v2"
+  provider: "local"
   api_key: ${EMBEDDING_API_KEY}
   api_base_url: ${EMBEDDING_API_BASE_URL}
-  dimension: 1536
+  dimension: 384
   batch_size: 100
 
 # LLM 설정
@@ -40,7 +40,7 @@ rag:
 vector_store:
   index_path: "data/vectorstore/index.faiss"
   index_type: "L2"
-  dimension: 1536
+  dimension: 384
 
 # UI 설정
 ui:

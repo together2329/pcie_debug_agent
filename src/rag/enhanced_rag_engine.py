@@ -120,14 +120,18 @@ class EnhancedRAGEngine:
             # 4. 컨텍스트 구성
             context = self._build_context(retrieved_docs, rag_query.include_metadata)
             
-            # 5. LLM 프롬프트 생성
-            prompt = self._create_prompt(rag_query.query, context)
+            # 5. LLM 프롬프트 생성 및 호출
+            try:
+                prompt = self._create_prompt(rag_query.query, context)
+                llm_response = self._call_llm(prompt)
+                answer, reasoning = self._parse_llm_response(llm_response)
+            except Exception as e:
+                # LLM이 사용할 수 없는 경우 검색된 문서만으로 응답 생성
+                logger.warning(f"LLM 호출 실패, 검색 결과만 제공: {e}")
+                answer = self._create_fallback_answer(rag_query.query, retrieved_docs)
+                reasoning = "LLM을 사용할 수 없어 검색된 문서 내용만 제공됩니다."
             
-            # 6. LLM 호출
-            llm_response = self._call_llm(prompt)
-            
-            # 7. 응답 파싱 및 신뢰도 계산
-            answer, reasoning = self._parse_llm_response(llm_response)
+            # 7. 신뢰도 계산
             confidence = self._calculate_confidence(retrieved_docs, answer)
             
             # 8. 응답 객체 생성
@@ -306,6 +310,21 @@ Answer:"""
         
         return answer, reasoning
     
+    def _create_fallback_answer(self, query: str, documents: List[Dict[str, Any]]) -> str:
+        """LLM 없이 검색 결과만으로 답변 생성"""
+        if not documents:
+            return f"질문 '{query}'에 대한 관련 정보를 찾을 수 없습니다."
+        
+        answer = f"질문 '{query}'에 대한 검색 결과:\n\n"
+        
+        for i, doc in enumerate(documents[:3], 1):  # 상위 3개만 표시
+            content = doc.get('content', '')
+            score = doc.get('score', 0.0)
+            answer += f"{i}. (유사도: {score:.3f})\n{content[:200]}...\n\n"
+        
+        answer += "더 정확한 분석을 위해서는 LLM API 키를 설정해주세요."
+        return answer
+
     def _calculate_confidence(self, documents: List[Dict[str, Any]], answer: str) -> float:
         """신뢰도 계산"""
         if not documents:
