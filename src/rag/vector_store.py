@@ -14,15 +14,16 @@ logger = logging.getLogger(__name__)
 class FAISSVectorStore:
     """FAISS 기반 벡터 스토어"""
     
-    def __init__(self, index_path: str, index_type: str = "L2"):
+    def __init__(self, index_path: str, index_type: str = "L2", dimension: int = 1536):
         """
         Args:
             index_path: 인덱스 파일 경로
             index_type: 인덱스 타입 ("L2" 또는 "IP")
+            dimension: 벡터 차원 (기본값: 1536)
         """
         self.index_path = Path(index_path)
         self.index_type = index_type
-        self.dimension = None
+        self.dimension = dimension
         self.index = None
         self.metadata = []
         

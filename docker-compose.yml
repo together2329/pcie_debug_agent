@@ -1,22 +1,116 @@
+version: '3.8'
+
 services:
-  uvm-debug-agent:
-    build: .
-    container_name: uvm-debug-agent
+  pcie-debug-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    image: pcie-debug-agent:latest
+    container_name: pcie-debug-agent
+    restart: unless-stopped
+    
     ports:
       - "8501:8501"
+    
     volumes:
+      # Data persistence
       - ./data:/app/data
       - ./logs:/app/logs
       - ./reports:/app/reports
       - ./configs:/app/configs
+      # For development - mount source code
+      # - ./src:/app/src
+      # - ./templates:/app/templates
+    
     environment:
+      # API Keys (set in .env file)
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - EMBEDDING_API_KEY=${EMBEDDING_API_KEY}
-      - EMBEDDING_API_BASE_URL=${EMBEDDING_API_BASE_URL}
       - LLM_API_KEY=${LLM_API_KEY}
-      - LLM_API_BASE_URL=${LLM_API_BASE_URL}
-    restart: unless-stopped
+      
+      # API Endpoints (optional custom endpoints)
+      - EMBEDDING_API_BASE_URL=${EMBEDDING_API_BASE_URL:-}
+      - LLM_API_BASE_URL=${LLM_API_BASE_URL:-}
+      
+      # Application settings
+      - APP_ENV=${APP_ENV:-production}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MAX_WORKERS=${MAX_WORKERS:-4}
+      - CACHE_SIZE_MB=${CACHE_SIZE_MB:-1000}
+      
+      # Streamlit configuration
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+      - STREAMLIT_SERVER_HEADLESS=true
+      - STREAMLIT_BROWSER_GATHERUSAGESTATS=false
+      - STREAMLIT_THEME_BASE=dark
+      - STREAMLIT_THEME_PRIMARYCOLOR=#1f77b4
+      
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8501"]
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
       interval: 30s
       timeout: 10s
-      retries: 3 
+      retries: 3
+      start_period: 40s
+    
+    networks:
+      - pcie-debug-network
+    
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+
+  # Optional: Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: pcie-debug-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - pcie-debug-network
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Optional: PostgreSQL for metadata storage
+  postgres:
+    image: postgres:15-alpine
+    container_name: pcie-debug-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-pcie_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-pcie_password}
+      - POSTGRES_DB=${POSTGRES_DB:-pcie_debug}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - pcie-debug-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  pcie-debug-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+  postgres-data:

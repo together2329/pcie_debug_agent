@@ -19,14 +19,17 @@ from src.ui.semantic_search import SemanticSearchInterface
 def load_settings() -> Settings:
     """설정 파일 로드"""
     config_path = Path(__file__).parent.parent.parent / "configs" / "settings.yaml"
-    if not config_path.exists():
-        st.error(f"Configuration file not found: {config_path}")
+    
+    try:
+        if config_path.exists():
+            return Settings.load_settings(str(config_path))
+        else:
+            # Create default settings with env vars
+            st.warning("Configuration file not found. Using default settings with environment variables.")
+            return Settings.load_settings(None)
+    except Exception as e:
+        st.error(f"Failed to load settings: {str(e)}")
         st.stop()
-    
-    with open(config_path, "r", encoding="utf-8") as f:
-        config = yaml.safe_load(f)
-    
-    return Settings.from_yaml(config)
 
 def initialize_rag_engine(settings: Settings) -> EnhancedRAGEngine:
     """RAG 엔진 초기화"""

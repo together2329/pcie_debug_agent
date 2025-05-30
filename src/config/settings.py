@@ -11,8 +11,8 @@ class EmbeddingConfig:
     """임베딩 설정"""
     model: str = "text-embedding-3-small"
     provider: str = "openai"
-    api_key: Optional[str] = None
-    api_base_url: Optional[str] = None
+    api_key: Optional[str] = field(default_factory=lambda: os.getenv('EMBEDDING_API_KEY'))
+    api_base_url: Optional[str] = field(default_factory=lambda: os.getenv('EMBEDDING_API_BASE_URL'))
     dimension: int = 1536
     batch_size: int = 32
 
@@ -21,8 +21,8 @@ class LLMConfig:
     """LLM 설정"""
     provider: str = "openai"
     model: str = "gpt-4"
-    api_key: Optional[str] = None
-    api_base_url: Optional[str] = None
+    api_key: Optional[str] = field(default_factory=lambda: os.getenv('LLM_API_KEY'))
+    api_base_url: Optional[str] = field(default_factory=lambda: os.getenv('LLM_API_BASE_URL'))
     temperature: float = 0.1
     max_tokens: int = 2000
 
@@ -98,8 +98,22 @@ class Settings:
         embedding_config = config.get('embedding', {})
         settings.embedding.model = embedding_config.get('model', settings.embedding.model)
         settings.embedding.provider = embedding_config.get('provider', settings.embedding.provider)
-        settings.embedding.api_key = embedding_config.get('api_key') or os.getenv('EMBEDDING_API_KEY')
-        settings.embedding.api_base_url = embedding_config.get('api_base_url') or os.getenv('EMBEDDING_API_BASE_URL')
+        
+        # API key priority: environment variable > config file > default
+        if os.getenv('EMBEDDING_API_KEY'):
+            settings.embedding.api_key = os.getenv('EMBEDDING_API_KEY')
+        elif embedding_config.get('api_key'):
+            settings.embedding.api_key = embedding_config.get('api_key')
+        # For OpenAI provider, also check OPENAI_API_KEY
+        elif settings.embedding.provider == 'openai' and os.getenv('OPENAI_API_KEY'):
+            settings.embedding.api_key = os.getenv('OPENAI_API_KEY')
+        # For Anthropic provider, also check ANTHROPIC_API_KEY
+        elif settings.embedding.provider == 'anthropic' and os.getenv('ANTHROPIC_API_KEY'):
+            settings.embedding.api_key = os.getenv('ANTHROPIC_API_KEY')
+        
+        # API base URL priority: environment variable > config file
+        settings.embedding.api_base_url = os.getenv('EMBEDDING_API_BASE_URL') or embedding_config.get('api_base_url')
+        
         settings.embedding.dimension = embedding_config.get('dimension', settings.embedding.dimension)
         settings.embedding.batch_size = embedding_config.get('batch_size', settings.embedding.batch_size)
         
@@ -107,8 +121,22 @@ class Settings:
         llm_config = config.get('llm', {})
         settings.llm.provider = llm_config.get('provider', settings.llm.provider)
         settings.llm.model = llm_config.get('model', settings.llm.model)
-        settings.llm.api_key = llm_config.get('api_key') or os.getenv('LLM_API_KEY')
-        settings.llm.api_base_url = llm_config.get('api_base_url') or os.getenv('LLM_API_BASE_URL')
+        
+        # API key priority: environment variable > config file > default
+        if os.getenv('LLM_API_KEY'):
+            settings.llm.api_key = os.getenv('LLM_API_KEY')
+        elif llm_config.get('api_key'):
+            settings.llm.api_key = llm_config.get('api_key')
+        # For OpenAI provider, also check OPENAI_API_KEY
+        elif settings.llm.provider == 'openai' and os.getenv('OPENAI_API_KEY'):
+            settings.llm.api_key = os.getenv('OPENAI_API_KEY')
+        # For Anthropic provider, also check ANTHROPIC_API_KEY
+        elif settings.llm.provider == 'anthropic' and os.getenv('ANTHROPIC_API_KEY'):
+            settings.llm.api_key = os.getenv('ANTHROPIC_API_KEY')
+        
+        # API base URL priority: environment variable > config file
+        settings.llm.api_base_url = os.getenv('LLM_API_BASE_URL') or llm_config.get('api_base_url')
+        
         settings.llm.temperature = llm_config.get('temperature', settings.llm.temperature)
         settings.llm.max_tokens = llm_config.get('max_tokens', settings.llm.max_tokens)
         
@@ -186,10 +214,26 @@ class Settings:
         """설정 유효성 검사"""
         # API 키 검사
         if self.embedding.provider != "local" and not self.embedding.api_key:
-            raise ValueError("임베딩 API 키가 필요합니다.")
+            env_vars = ["EMBEDDING_API_KEY"]
+            if self.embedding.provider == "openai":
+                env_vars.append("OPENAI_API_KEY")
+            elif self.embedding.provider == "anthropic":
+                env_vars.append("ANTHROPIC_API_KEY")
+            raise ValueError(
+                f"임베딩 API 키가 필요합니다. "
+                f"다음 환경 변수 중 하나를 설정하세요: {', '.join(env_vars)}"
+            )
         
         if self.llm.provider != "local" and not self.llm.api_key:
-            raise ValueError("LLM API 키가 필요합니다.")
+            env_vars = ["LLM_API_KEY"]
+            if self.llm.provider == "openai":
+                env_vars.append("OPENAI_API_KEY")
+            elif self.llm.provider == "anthropic":
+                env_vars.append("ANTHROPIC_API_KEY")
+            raise ValueError(
+                f"LLM API 키가 필요합니다. "
+                f"다음 환경 변수 중 하나를 설정하세요: {', '.join(env_vars)}"
+            )
         
         # 디렉토리 생성
         try:
@@ -216,16 +260,45 @@ class Settings:
             
         except Exception as e:
             raise ValueError(f"디렉토리 생성 실패: {str(e)}")
+
+
+def load_settings(config_path: Optional[Path] = None) -> Settings:
+    """설정을 로드하고 환경 변수를 적용합니다.
+    
+    Args:
+        config_path: 설정 파일 경로 (옵션)
+    
+    Returns:
+        Settings: 로드된 설정 객체
+    """
+    if config_path and config_path.exists():
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        settings = Settings.from_yaml(config)
+    else:
+        settings = Settings()
         
-        # 로그 디렉토리 검사
-        for log_dir in self.log_directories:
-            log_path = Path(log_dir)
-            if not log_path.exists():
-                log_path.mkdir(parents=True, exist_ok=True)
+        # 환경 변수에서 직접 설정 읽기
+        # 임베딩 설정
+        if os.getenv('EMBEDDING_API_KEY'):
+            settings.embedding.api_key = os.getenv('EMBEDDING_API_KEY')
+        elif settings.embedding.provider == 'openai' and os.getenv('OPENAI_API_KEY'):
+            settings.embedding.api_key = os.getenv('OPENAI_API_KEY')
+        elif settings.embedding.provider == 'anthropic' and os.getenv('ANTHROPIC_API_KEY'):
+            settings.embedding.api_key = os.getenv('ANTHROPIC_API_KEY')
+            
+        if os.getenv('EMBEDDING_API_BASE_URL'):
+            settings.embedding.api_base_url = os.getenv('EMBEDDING_API_BASE_URL')
         
-        # 알림 설정 검사
-        if self.notifications.slack_webhook_url and not self.notifications.slack_webhook_url.startswith("https://"):
-            raise ValueError("Slack 웹훅 URL이 올바르지 않습니다.")
-        
-        if self.notifications.smtp.username and not self.notifications.smtp.password:
-            raise ValueError("SMTP 비밀번호가 필요합니다.") 
+        # LLM 설정
+        if os.getenv('LLM_API_KEY'):
+            settings.llm.api_key = os.getenv('LLM_API_KEY')
+        elif settings.llm.provider == 'openai' and os.getenv('OPENAI_API_KEY'):
+            settings.llm.api_key = os.getenv('OPENAI_API_KEY')
+        elif settings.llm.provider == 'anthropic' and os.getenv('ANTHROPIC_API_KEY'):
+            settings.llm.api_key = os.getenv('ANTHROPIC_API_KEY')
+            
+        if os.getenv('LLM_API_BASE_URL'):
+            settings.llm.api_base_url = os.getenv('LLM_API_BASE_URL')
+    
+    return settings 

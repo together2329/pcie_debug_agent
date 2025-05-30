@@ -31,13 +31,14 @@ def setup_logging():
 def load_settings() -> Settings:
     """설정 파일 로드"""
     config_path = Path("configs/settings.yaml")
-    if not config_path.exists():
-        raise FileNotFoundError(f"설정 파일을 찾을 수 없습니다: {config_path}")
     
-    with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
+    if config_path.exists():
+        settings = Settings.load_settings(str(config_path))
+    else:
+        # Create default settings with env vars
+        print("Configuration file not found. Using default settings with environment variables.")
+        settings = Settings.load_settings(None)
     
-    settings = Settings.from_yaml(config)
     settings.validate()
     return settings
 
@@ -47,7 +48,8 @@ def initialize_rag_engine(settings: Settings) -> EnhancedRAGEngine:
         # 벡터 스토어 초기화
         vector_store = FAISSVectorStore(
             index_path=settings.vector_store.index_path,
-            index_type=settings.vector_store.index_type
+            index_type=settings.vector_store.index_type,
+            dimension=settings.vector_store.dimension
         )
         
         # 모델 매니저 초기화
