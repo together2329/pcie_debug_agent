@@ -171,6 +171,13 @@ class LLMModelManager:
             )
         },
         "local": {
+            "llama-3.2-3b-instruct": ModelInfo(
+                name="Llama 3.2 3B Instruct",
+                provider="local",
+                description="Optimized for M1 Mac with Q4_K_M quantization",
+                context_window=131072,
+                memory_usage="~1.8GB"
+            ),
             "llama2-7b": ModelInfo(
                 name="Llama 2 7B",
                 provider="local",
@@ -223,10 +230,10 @@ class LLMModelManager:
         elif provider == "local":
             # Initialize local model handler
             try:
-                from llama_cpp import Llama
-                self._clients["local"] = {"llama_cpp": Llama}
-            except ImportError:
-                logger.warning("llama-cpp-python not installed for local models")
+                from src.models.local_llm_provider import LocalLLMProvider
+                self._clients["local"] = LocalLLMProvider(**kwargs)
+            except ImportError as e:
+                logger.warning(f"Local LLM not available: {e}")
                 self._clients["local"] = None
                 
         else:
@@ -279,9 +286,19 @@ class LLMModelManager:
                 if self._clients["local"] is None:
                     raise RuntimeError("Local models not available")
                     
-                # Load and use local model
-                # This is a simplified implementation
-                return f"[Local model response for {model}]"
+                # Use LocalLLMProvider
+                local_provider = self._clients["local"]
+                
+                # Ensure the model matches what LocalLLMProvider expects
+                if model not in local_provider.MODELS:
+                    logger.warning(f"Model {model} not supported by LocalLLMProvider, using default")
+                    
+                return local_provider.generate_completion(
+                    prompt=prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    **kwargs
+                )
                 
             else:
                 raise ValueError(f"Unsupported provider: {provider}")
@@ -392,8 +409,8 @@ class ModelManager:
             "offline_analysis": {
                 "embedding": "sentence-transformers/all-MiniLM-L12-v2",
                 "llm_provider": "local",
-                "llm_model": "codellama-7b",
-                "reason": "Works without internet connection"
+                "llm_model": "llama-3.2-3b-instruct",
+                "reason": "Works without internet connection, optimized for M1 Mac"
             },
             "cost_optimized": {
                 "embedding": "sentence-transformers/all-MiniLM-L6-v2",

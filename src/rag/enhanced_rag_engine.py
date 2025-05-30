@@ -15,6 +15,7 @@ from src.vectorstore.faiss_store import FAISSVectorStore
 from src.models.model_manager import ModelManager
 from src.rag.retriever import Retriever
 from src.rag.analyzer import Analyzer
+from src.models.pcie_prompts import PCIePromptTemplates
 
 logger = logging.getLogger(__name__)
 
@@ -269,26 +270,9 @@ class EnhancedRAGEngine:
         return "\n---\n".join(context_parts)
     
     def _create_prompt(self, query: str, context: str) -> str:
-        """LLM 프롬프트 생성"""
-        prompt = f"""You are an expert assistant with access to a knowledge base. 
-Answer the following question based on the provided context. 
-If the context doesn't contain sufficient information, say so clearly.
-
-Question: {query}
-
-Context from knowledge base:
-{context}
-
-Instructions:
-1. Provide a comprehensive answer based on the context
-2. Cite the source numbers [Source N] when using information
-3. If you're making any inferences, clearly state them
-4. Structure your answer with clear sections if needed
-5. At the end, provide a brief reasoning for your answer
-
-Answer:"""
-        
-        return prompt
+        """LLM 프롬프트 생성 (PCIe 특화)"""
+        # Use PCIe-specific prompt templates
+        return PCIePromptTemplates.get_prompt_for_query_type(query, context)
     
     def _call_llm(self, prompt: str) -> str:
         """LLM 호출"""

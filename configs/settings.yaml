@@ -21,12 +21,21 @@ embedding:
 
 # LLM 설정
 llm:
-  provider: "openai"
-  model: "gpt-4"
+  provider: "local"  # Options: "openai", "anthropic", "local"
+  model: "llama-3.2-3b-instruct"
   api_key: ${LLM_API_KEY}
   api_base_url: ${LLM_API_BASE_URL}
   temperature: 0.1
   max_tokens: 2000
+
+# Local LLM 설정
+local_llm:
+  models_dir: "models"
+  n_ctx: 8192  # Context window size
+  n_gpu_layers: -1  # Use all GPU layers on M1 (-1 for auto)
+  verbose: false
+  auto_download: true  # Automatically download models if not present
+  preferred_model: "llama-3.2-3b-instruct"
 
 # RAG 설정
 rag:

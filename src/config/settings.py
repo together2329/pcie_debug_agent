@@ -17,6 +17,16 @@ class EmbeddingConfig:
     batch_size: int = 32
 
 @dataclass
+class LocalLLMConfig:
+    """Local LLM 설정"""
+    models_dir: str = "models"
+    n_ctx: int = 8192
+    n_gpu_layers: int = -1
+    verbose: bool = False
+    auto_download: bool = True
+    preferred_model: str = "llama-3.2-3b-instruct"
+
+@dataclass
 class LLMConfig:
     """LLM 설정"""
     provider: str = "openai"
@@ -69,6 +79,9 @@ class Settings:
     
     # LLM 설정
     llm: LLMConfig = field(default_factory=LLMConfig)
+    
+    # Local LLM 설정
+    local_llm: LocalLLMConfig = field(default_factory=LocalLLMConfig)
     
     # RAG 설정
     rag: RAGConfig = field(default_factory=RAGConfig)
@@ -140,6 +153,15 @@ class Settings:
         settings.llm.temperature = llm_config.get('temperature', settings.llm.temperature)
         settings.llm.max_tokens = llm_config.get('max_tokens', settings.llm.max_tokens)
         
+        # Local LLM 설정
+        local_llm_config = config.get('local_llm', {})
+        settings.local_llm.models_dir = local_llm_config.get('models_dir', settings.local_llm.models_dir)
+        settings.local_llm.n_ctx = local_llm_config.get('n_ctx', settings.local_llm.n_ctx)
+        settings.local_llm.n_gpu_layers = local_llm_config.get('n_gpu_layers', settings.local_llm.n_gpu_layers)
+        settings.local_llm.verbose = local_llm_config.get('verbose', settings.local_llm.verbose)
+        settings.local_llm.auto_download = local_llm_config.get('auto_download', settings.local_llm.auto_download)
+        settings.local_llm.preferred_model = local_llm_config.get('preferred_model', settings.local_llm.preferred_model)
+        
         # RAG 설정
         rag_config = config.get('rag', {})
         settings.rag.chunk_size = rag_config.get('chunk_size', settings.rag.chunk_size)
@@ -188,6 +210,14 @@ class Settings:
                 'api_base_url': self.llm.api_base_url,
                 'temperature': self.llm.temperature,
                 'max_tokens': self.llm.max_tokens
+            },
+            'local_llm': {
+                'models_dir': self.local_llm.models_dir,
+                'n_ctx': self.local_llm.n_ctx,
+                'n_gpu_layers': self.local_llm.n_gpu_layers,
+                'verbose': self.local_llm.verbose,
+                'auto_download': self.local_llm.auto_download,
+                'preferred_model': self.local_llm.preferred_model
             },
             'rag': {
                 'chunk_size': self.rag.chunk_size,
