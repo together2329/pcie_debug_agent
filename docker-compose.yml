@@ -1,15 +1,22 @@
-version: '3.8'
-
 services:
   uvm-debug-agent:
     build: .
     container_name: uvm-debug-agent
     ports:
-      - "8502:8501"
+      - "8501:8501"
     volumes:
       - ./data:/app/data
+      - ./logs:/app/logs
       - ./reports:/app/reports
+      - ./configs:/app/configs
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-    restart: unless-stopped 
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY}
+      - EMBEDDING_API_BASE_URL=${EMBEDDING_API_BASE_URL}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_API_BASE_URL=${LLM_API_BASE_URL}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501"]
+      interval: 30s
+      timeout: 10s
+      retries: 3 

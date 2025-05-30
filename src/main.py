@@ -1,270 +1,321 @@
+"""
+UVM Debug Agent 메인 애플리케이션
+"""
+
 import argparse
 import logging
 from pathlib import Path
-from datetime import datetime
-from typing import List, Dict, Any
+import sys
+import os
+import yaml
+import streamlit as st
 
 from config.settings import Settings
-from collectors.log_collector import LogCollector, UVMError
-from processors.document_chunker import DocumentChunker
-from processors.code_chunker import SystemVerilogChunker
-from processors.embedder import Embedder
-from vectorstore.faiss_store import FAISSVectorStore
-from rag.retriever import Retriever
-from rag.analyzer import Analyzer
-from reports.report_generator import ReportGenerator
-from model_manager import ModelManager
+from rag.enhanced_rag_engine import EnhancedRAGEngine
+from ui.interactive_chat import InteractiveChatInterface
+from ui.semantic_search import SemanticSearchInterface
+from rag.vector_store import FAISSVectorStore
+from rag.model_manager import ModelManager
 
-logger = logging.getLogger(__name__)
-
-def setup_logging(log_level: str = "INFO"):
+def setup_logging():
     """로깅 설정"""
     logging.basicConfig(
-        level=getattr(logging, log_level),
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler('logs/app.log')
+        ]
     )
 
-def collect_errors(settings: Settings, start_time: str = None) -> List[UVMError]:
-    """로그 파일에서 에러 수집"""
-    collector = LogCollector()
-    errors = []
+def load_settings() -> Settings:
+    """설정 파일 로드"""
+    config_path = Path("configs/settings.yaml")
+    if not config_path.exists():
+        raise FileNotFoundError(f"설정 파일을 찾을 수 없습니다: {config_path}")
     
-    for log_dir in settings.log_directories:
-        try:
-            dir_errors = collector.collect_logs(
-                log_dir=log_dir,
-                start_time=start_time,
-                file_pattern="*.log"
-            )
-            errors.extend(dir_errors)
-        except Exception as e:
-            logger.error(f"Error collecting logs from {log_dir}: {e}")
-            
-    return errors
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    
+    settings = Settings.from_yaml(config)
+    settings.validate()
+    return settings
 
-def process_documents(settings: Settings) -> List[Dict[str, Any]]:
-    """문서 처리 및 임베딩"""
-    # ModelManager 초기화
-    model_manager = ModelManager()
-    
-    # API 설정
-    if settings.embedding_api_key:
-        model_manager.configure_embedding_api(
-            settings.embedding_model,
-            api_key=settings.embedding_api_key,
-            base_url=settings.embedding_api_base_url
+def initialize_rag_engine(settings: Settings) -> EnhancedRAGEngine:
+    """RAG 엔진 초기화"""
+    try:
+        # 벡터 스토어 초기화
+        vector_store = FAISSVectorStore(
+            index_path=settings.vector_store.index_path,
+            index_type=settings.vector_store.index_type
         )
-    
-    if settings.llm_api_key:
-        model_manager.configure_llm_api(
-            settings.llm_provider,
-            api_key=settings.llm_api_key,
-            base_url=settings.llm_api_base_url
+        
+        # 모델 매니저 초기화
+        model_manager = ModelManager(
+            embedding_model=settings.embedding.model,
+            embedding_provider=settings.embedding.provider,
+            embedding_api_key=settings.embedding.api_key,
+            embedding_api_base_url=settings.embedding.api_base_url,
+            llm_provider=settings.llm.provider,
+            llm_model=settings.llm.model,
+            llm_api_key=settings.llm.api_key,
+            llm_api_base_url=settings.llm.api_base_url
         )
-    
-    # 문서 청커 초기화
-    doc_chunker = DocumentChunker(
-        chunk_size=settings.chunk_size,
-        chunk_overlap=settings.chunk_overlap
-    )
-    
-    # 코드 청커 초기화
-    code_chunker = SystemVerilogChunker(
-        chunk_size=settings.chunk_size,
-        chunk_overlap=settings.chunk_overlap
-    )
-    
-    # 임베더 초기화
-    embedder = Embedder(
-        model_manager=model_manager,
-        model_name=settings.embedding_model,
-        batch_size=settings.embedding_batch_size
-    )
-    
-    # 벡터 스토어 초기화
-    vector_store = FAISSVectorStore(
-        dimension=settings.embedding_dimension,
-        index_type="IndexFlatIP"
-    )
-    
-    # 문서 처리
-    chunks = []
-    
-    # 스펙 문서 처리
-    for spec_file in Path(settings.data_dir).glob("specs/**/*"):
-        if spec_file.suffix in ['.pdf', '.md', '.txt']:
-            try:
-                doc_chunks = doc_chunker.chunk_documents([spec_file])
-                chunks.extend(doc_chunks)
-            except Exception as e:
-                logger.error(f"Error processing spec file {spec_file}: {e}")
-    
-    # 코드 파일 처리
-    for code_file in Path(settings.data_dir).glob("testbench/**/*"):
-        if code_file.suffix in ['.sv', '.svh', '.v', '.list']:
-            try:
-                code_chunks = code_chunker.chunk_sv_file(code_file)
-                chunks.extend(code_chunks)
-            except Exception as e:
-                logger.error(f"Error processing code file {code_file}: {e}")
-    
-    # 임베딩 생성
-    embedder.embed_chunks(chunks)
-    
-    # 벡터 스토어에 추가
-    vector_store.add_documents(
-        embeddings=[chunk.embedding for chunk in chunks],
-        documents=[chunk.content for chunk in chunks],
-        metadata=[chunk.metadata for chunk in chunks]
-    )
-    
-    return chunks
+        
+        # RAG 엔진 초기화
+        engine = EnhancedRAGEngine(
+            vector_store=vector_store,
+            model_manager=model_manager,
+            llm_provider=settings.llm.provider,
+            llm_model=settings.llm.model,
+            temperature=0.1,
+            max_tokens=2000
+        )
+        return engine
+    except Exception as e:
+        logging.error(f"RAG 엔진 초기화 실패: {str(e)}")
+        raise
 
-def analyze_errors(settings: Settings,
-                  errors: List[UVMError],
-                  chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """에러 분석"""
-    # ModelManager 초기화
-    model_manager = ModelManager()
+def run_web_interface(settings: Settings):
+    """웹 인터페이스 실행"""
+    st.set_page_config(
+        page_title=settings.app_name,
+        page_icon="🔍",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
     
-    # API 설정
-    if settings.embedding_api_key:
-        model_manager.configure_embedding_api(
-            settings.embedding_model,
-            api_key=settings.embedding_api_key,
-            base_url=settings.embedding_api_base_url
+    # 커스텀 CSS
+    st.markdown("""
+        <style>
+        .stApp {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .stButton>button {
+            width: 100%;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    # RAG 엔진 초기화
+    rag_engine = initialize_rag_engine(settings)
+    
+    # 사이드바
+    with st.sidebar:
+        st.title("🔍 UVM Debug Agent")
+        
+        # 모드 선택
+        mode = st.radio(
+            "모드 선택",
+            ["Chat", "Search", "Settings"],
+            index=0
         )
+        
+        # 시스템 상태
+        st.markdown("---")
+        st.subheader("시스템 상태")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("임베딩 모델", settings.embedding.model)
+            st.metric("LLM 제공자", settings.llm.provider)
+        with col2:
+            st.metric("청크 크기", settings.rag.chunk_size)
+            st.metric("총 쿼리 수", rag_engine.total_queries)
+        
+        # 성능 메트릭
+        st.markdown("---")
+        st.subheader("성능 메트릭")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("평균 응답 시간", f"{rag_engine.avg_response_time:.2f}s")
+            st.metric("캐시 히트", f"{rag_engine.cache_hits}")
+        with col2:
+            st.metric("평균 신뢰도", f"{rag_engine.avg_confidence:.2%}")
+            st.metric("캐시 미스", f"{rag_engine.cache_misses}")
     
-    if settings.llm_api_key:
-        model_manager.configure_llm_api(
-            settings.llm_provider,
-            api_key=settings.llm_api_key,
-            base_url=settings.llm_api_base_url
-        )
+    # 메인 컨텐츠
+    if mode == "Chat":
+        chat_interface = InteractiveChatInterface(rag_engine, settings)
+        chat_interface.render()
     
-    # 임베더 초기화
-    embedder = Embedder(
-        model_manager=model_manager,
-        model_name=settings.embedding_model,
-        batch_size=settings.embedding_batch_size
-    )
+    elif mode == "Search":
+        search_interface = SemanticSearchInterface(rag_engine, settings)
+        search_interface.render()
     
-    # 벡터 스토어 초기화
-    vector_store = FAISSVectorStore(
-        dimension=settings.embedding_dimension,
-        index_type="IndexFlatIP"
-    )
-    
-    # 검색기 초기화
-    retriever = Retriever(
-        vector_store=vector_store,
-        embedder=embedder
-    )
-    
-    # 분석기 초기화
-    analyzer = Analyzer(
-        model_manager=model_manager,
-        provider=settings.llm_provider,
-        model=settings.llm_model,
-        temperature=settings.llm_temperature,
-        max_tokens=settings.llm_max_tokens
-    )
-    
-    # 에러 분석
-    analysis_results = []
-    
-    for error in errors:
-        try:
-            # 관련 문서 검색
-            context = retriever.retrieve(
-                query=error.message,
-                k=settings.retrieval_top_k
+    else:  # Settings
+        st.title("설정")
+        
+        with st.form("settings_form"):
+            st.subheader("임베딩 설정")
+            embedding_provider = st.selectbox(
+                "임베딩 제공자",
+                ["Local", "OpenAI", "Cohere", "Voyage", "Custom"],
+                index=["Local", "OpenAI", "Cohere", "Voyage", "Custom"].index(settings.embedding.provider)
             )
             
-            # 에러 분석
-            analysis = analyzer.analyze_error(error, context)
-            analysis_results.append(analysis)
+            if embedding_provider == "Custom":
+                embedding_model = st.text_input("임베딩 모델", settings.embedding.model)
+                embedding_api_key = st.text_input("API 키", settings.embedding.api_key or "", type="password")
+                embedding_base_url = st.text_input("Base URL", settings.embedding.api_base_url or "")
+                embedding_headers = st.text_area("추가 헤더 (JSON)", "{}")
+            else:
+                if embedding_provider == "OpenAI":
+                    embedding_model = st.selectbox(
+                        "임베딩 모델",
+                        ["text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002"],
+                        index=["text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002"].index(settings.embedding.model)
+                    )
+                elif embedding_provider == "Cohere":
+                    embedding_model = st.selectbox(
+                        "임베딩 모델",
+                        ["embed-english-v3.0", "embed-multilingual-v3.0"],
+                        index=["embed-english-v3.0", "embed-multilingual-v3.0"].index(settings.embedding.model)
+                    )
+                elif embedding_provider == "Voyage":
+                    embedding_model = st.selectbox(
+                        "임베딩 모델",
+                        ["voyage-01", "voyage-02"],
+                        index=["voyage-01", "voyage-02"].index(settings.embedding.model)
+                    )
+                else:
+                    embedding_model = st.text_input("임베딩 모델", settings.embedding.model)
+                
+                embedding_api_key = st.text_input("API 키", settings.embedding.api_key or "", type="password")
+                embedding_base_url = st.text_input("Base URL (선택사항)", settings.embedding.api_base_url or "")
+                embedding_headers = "{}"
             
-        except Exception as e:
-            logger.error(f"Error analyzing error {error}: {e}")
+            st.subheader("LLM 설정")
+            llm_provider = st.selectbox(
+                "LLM 제공자",
+                ["openai", "anthropic", "ollama", "custom"],
+                index=["openai", "anthropic", "ollama", "custom"].index(settings.llm.provider)
+            )
             
-    return analysis_results
+            if llm_provider == "custom":
+                llm_model = st.text_input("LLM 모델", settings.llm.model)
+                llm_api_key = st.text_input("API 키", settings.llm.api_key or "", type="password")
+                llm_base_url = st.text_input("Base URL", settings.llm.api_base_url or "")
+                llm_headers = st.text_area("추가 헤더 (JSON)", "{}")
+            else:
+                if llm_provider == "openai":
+                    llm_model = st.selectbox(
+                        "LLM 모델",
+                        ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"],
+                        index=["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"].index(settings.llm.model)
+                    )
+                elif llm_provider == "anthropic":
+                    llm_model = st.selectbox(
+                        "LLM 모델",
+                        ["claude-3-opus", "claude-3-sonnet", "claude-2"],
+                        index=["claude-3-opus", "claude-3-sonnet", "claude-2"].index(settings.llm.model)
+                    )
+                elif llm_provider == "ollama":
+                    llm_model = st.selectbox(
+                        "LLM 모델",
+                        ["llama2", "mistral", "codellama"],
+                        index=["llama2", "mistral", "codellama"].index(settings.llm.model)
+                    )
+                else:
+                    llm_model = st.text_input("LLM 모델", settings.llm.model)
+                
+                llm_api_key = st.text_input("API 키", settings.llm.api_key or "", type="password")
+                llm_base_url = st.text_input("Base URL (선택사항)", settings.llm.api_base_url or "")
+                llm_headers = "{}"
+            
+            st.subheader("RAG 설정")
+            chunk_size = st.number_input("청크 크기", min_value=100, max_value=1000, value=settings.rag.chunk_size)
+            chunk_overlap = st.number_input("청크 오버랩", min_value=0, max_value=100, value=settings.rag.chunk_overlap)
+            context_window = st.number_input("컨텍스트 윈도우", min_value=1, max_value=10, value=settings.rag.context_window)
+            min_similarity = st.slider("최소 유사도", min_value=0.0, max_value=1.0, value=settings.rag.min_similarity, step=0.05)
+            rerank = st.checkbox("재순위화", value=settings.rag.rerank)
+            
+            st.subheader("UI 설정")
+            theme = st.selectbox("테마", ["light", "dark"], index=["light", "dark"].index(settings.ui.theme))
+            max_width = st.number_input("최대 너비", min_value=800, max_value=2000, value=settings.ui.max_width)
+            show_confidence = st.checkbox("신뢰도 표시", value=settings.ui.show_confidence)
+            show_sources = st.checkbox("소스 표시", value=settings.ui.show_sources)
+            group_by_file = st.checkbox("파일별 그룹화", value=settings.ui.group_by_file)
+            
+            if st.form_submit_button("설정 저장"):
+                # 설정 업데이트
+                settings.embedding.provider = embedding_provider.lower()
+                settings.embedding.model = embedding_model
+                settings.embedding.api_key = embedding_api_key
+                settings.embedding.api_base_url = embedding_base_url
+                
+                settings.llm.provider = llm_provider
+                settings.llm.model = llm_model
+                settings.llm.api_key = llm_api_key
+                settings.llm.api_base_url = llm_base_url
+                
+                settings.rag.chunk_size = chunk_size
+                settings.rag.chunk_overlap = chunk_overlap
+                settings.rag.context_window = context_window
+                settings.rag.min_similarity = min_similarity
+                settings.rag.rerank = rerank
+                
+                settings.ui.theme = theme
+                settings.ui.max_width = max_width
+                settings.ui.show_confidence = show_confidence
+                settings.ui.show_sources = show_sources
+                settings.ui.group_by_file = group_by_file
+                
+                # 설정 저장
+                with open("configs/settings.yaml", 'w') as f:
+                    yaml.dump(settings.to_dict(), f, default_flow_style=False)
+                
+                st.success("설정이 저장되었습니다.")
+                
+                # RAG 엔진 재초기화
+                st.info("RAG 엔진을 재초기화합니다...")
+                rag_engine = initialize_rag_engine(settings)
+                st.success("RAG 엔진이 재초기화되었습니다.")
 
-def generate_reports(settings: Settings,
-                    errors: List[UVMError],
-                    analysis_results: List[Dict[str, Any]]):
-    """리포트 생성"""
-    report_generator = ReportGenerator()
+def run_cli_interface(settings: Settings):
+    """CLI 인터페이스 실행"""
+    rag_engine = initialize_rag_engine(settings)
     
-    # HTML 리포트 생성
-    html_report = report_generator.generate_report(
-        errors=errors,
-        analysis_results=analysis_results,
-        output_path=settings.report_dir / "report.html",
-        format="html"
-    )
+    print(f"Welcome to {settings.app_name} v{settings.version}")
+    print("Type 'exit' to quit")
     
-    # Markdown 리포트 생성
-    md_report = report_generator.generate_report(
-        errors=errors,
-        analysis_results=analysis_results,
-        output_path=settings.report_dir / "report.md",
-        format="markdown"
-    )
-    
-    # 요약 리포트 생성
-    summary_report = report_generator.generate_summary(
-        errors=errors,
-        analysis_results=analysis_results,
-        output_path=settings.report_dir / "summary.yaml"
-    )
-    
-    return html_report, md_report, summary_report
+    while True:
+        try:
+            query = input("\nEnter your query: ")
+            if query.lower() == 'exit':
+                break
+            
+            response = rag_engine.query(query)
+            print("\nResponse:", response.answer)
+            
+            if response.sources:
+                print("\nSources:")
+                for source in response.sources:
+                    print(f"- {source['file']}: {source['content'][:100]}...")
+            
+            print(f"\nConfidence: {response.confidence:.2%}")
+            print(f"Response time: {response.response_time:.2f}s")
+            
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            print(f"Error: {str(e)}")
 
 def main():
     """메인 함수"""
-    parser = argparse.ArgumentParser(description="UVM 에러 분석 도구")
-    parser.add_argument("--config", type=str, default="configs/settings.yaml",
-                      help="설정 파일 경로")
-    parser.add_argument("--start-time", type=str,
-                      help="분석 시작 시간 (YYYY-MM-DD HH:MM:SS)")
-    parser.add_argument("--log-level", type=str, default="INFO",
-                      choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-                      help="로깅 레벨")
+    parser = argparse.ArgumentParser(description="UVM Debug Agent")
+    parser.add_argument("--cli", action="store_true", help="Run in CLI mode")
     args = parser.parse_args()
     
-    # 로깅 설정
-    setup_logging(args.log_level)
+    setup_logging()
+    settings = load_settings()
     
-    try:
-        # 설정 로드
-        settings = Settings.from_yaml(args.config)
-        
-        # 에러 수집
-        logger.info("Collecting errors...")
-        errors = collect_errors(settings, args.start_time)
-        logger.info(f"Collected {len(errors)} errors")
-        
-        # 문서 처리
-        logger.info("Processing documents...")
-        chunks = process_documents(settings)
-        logger.info(f"Processed {len(chunks)} chunks")
-        
-        # 에러 분석
-        logger.info("Analyzing errors...")
-        analysis_results = analyze_errors(settings, errors, chunks)
-        logger.info(f"Analyzed {len(analysis_results)} errors")
-        
-        # 리포트 생성
-        logger.info("Generating reports...")
-        html_report, md_report, summary_report = generate_reports(
-            settings, errors, analysis_results
-        )
-        logger.info(f"Generated reports: {html_report}, {md_report}, {summary_report}")
-        
-    except Exception as e:
-        logger.error(f"Error in main: {e}")
-        raise
+    if args.cli:
+        run_cli_interface(settings)
+    else:
+        run_web_interface(settings)
 
 if __name__ == "__main__":
     main() 
