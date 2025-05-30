@@ -94,7 +94,7 @@ def build(
     
     try:
         # Check if index exists
-        index_path = Path(settings.vector_store_path)
+        index_path = Path(settings.vector_store.index_path)
         if index_path.exists() and not force:
             if not confirm("Index already exists. Rebuild?"):
                 print_info("Operation cancelled")
@@ -105,17 +105,17 @@ def build(
         
         # Vector store
         vector_store = FAISSVectorStore(
-            index_path=settings.vector_store_path,
-            index_type=settings.index_type,
-            dimension=settings.embedding_dimension
+            index_path=settings.vector_store.index_path,
+            index_type=settings.vector_store.index_type,
+            dimension=settings.vector_store.dimension
         )
         
         # Model manager
         model_manager = ModelManager(
-            embedding_model=settings.embedding_model,
-            embedding_provider=settings.embedding_provider,
-            embedding_api_key=settings.embedding_config.api_key,
-            embedding_api_base_url=settings.embedding_config.api_base_url
+            embedding_model=settings.embedding.model,
+            embedding_provider=settings.embedding.provider,
+            embedding_api_key=settings.embedding.api_key,
+            embedding_api_base_url=settings.embedding.api_base_url
         )
         
         # Collectors and processors
@@ -125,8 +125,8 @@ def build(
         )
         
         chunker = DocumentChunker(
-            chunk_size=chunk_size or settings.chunk_size,
-            chunk_overlap=chunk_overlap or settings.chunk_overlap
+            chunk_size=chunk_size or settings.rag.chunk_size,
+            chunk_overlap=chunk_overlap or settings.rag.chunk_overlap
         )
         
         embedder = Embedder(
@@ -248,12 +248,12 @@ def update(ctx: click.Context, paths: List[str], pattern: List[str]):
     try:
         # Load existing index
         vector_store = FAISSVectorStore(
-            index_path=settings.vector_store_path,
-            index_type=settings.index_type,
-            dimension=settings.embedding_dimension
+            index_path=settings.vector_store.index_path,
+            index_type=settings.vector_store.index_type,
+            dimension=settings.vector_store.dimension
         )
         
-        if not Path(settings.vector_store_path + ".faiss").exists():
+        if not Path(settings.vector_store.index_path + ".faiss").exists():
             print_error("No existing index found. Use 'index build' first.")
             sys.exit(1)
         
@@ -281,12 +281,12 @@ def stats(ctx: click.Context):
     try:
         # Load index
         vector_store = FAISSVectorStore(
-            index_path=settings.vector_store_path,
-            index_type=settings.index_type,
-            dimension=settings.embedding_dimension
+            index_path=settings.vector_store.index_path,
+            index_type=settings.vector_store.index_type,
+            dimension=settings.vector_store.dimension
         )
         
-        if not Path(settings.vector_store_path + ".faiss").exists():
+        if not Path(settings.vector_store.index_path + ".faiss").exists():
             print_error("No index found")
             sys.exit(1)
         
@@ -334,9 +334,9 @@ def optimize(ctx: click.Context, confirm: bool):
         
         # Load index
         vector_store = FAISSVectorStore(
-            index_path=settings.vector_store_path,
-            index_type=settings.index_type,
-            dimension=settings.embedding_dimension
+            index_path=settings.vector_store.index_path,
+            index_type=settings.vector_store.index_type,
+            dimension=settings.vector_store.dimension
         )
         
         vector_store.load_index()

@@ -10,7 +10,7 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from src.cli.commands import analyze, index, search, report, config, test
 from src.cli.utils.output import console, print_banner
-from src.config.settings import Settings
+from src.config.settings import Settings, load_settings
 
 
 @click.group()
@@ -46,14 +46,14 @@ def cli(ctx: click.Context, config: Optional[str], verbose: bool, quiet: bool):
     # Load configuration
     try:
         if config:
-            settings = Settings.load_settings(config)
+            settings = load_settings(Path(config))
         else:
             # Try default locations
             default_config = Path("configs/settings.yaml")
             if default_config.exists():
-                settings = Settings.load_settings(str(default_config))
+                settings = load_settings(default_config)
             else:
-                settings = Settings.load_settings(None)  # Use defaults with env vars
+                settings = load_settings(None)  # Use defaults with env vars
         
         settings.validate()
         ctx.obj["settings"] = settings

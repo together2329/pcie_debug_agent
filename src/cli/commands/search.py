@@ -70,7 +70,7 @@ def search(
     
     try:
         # Check if index exists
-        if not Path(settings.vector_store_path + ".faiss").exists():
+        if not Path(settings.vector_store.index_path + ".faiss").exists():
             print_error("No index found. Run 'pcie-debug index build' first.")
             sys.exit(1)
         
@@ -89,19 +89,19 @@ def search(
             
             # Vector store
             vector_store = FAISSVectorStore(
-                index_path=settings.vector_store_path,
-                index_type=settings.index_type,
-                dimension=settings.embedding_dimension
+                index_path=settings.vector_store.index_path,
+                index_type=settings.vector_store.index_type,
+                dimension=settings.vector_store.dimension
             )
             vector_store.load_index()
             progress.update(task, advance=1)
             
             # Model manager for embeddings
             model_manager = ModelManager(
-                embedding_model=settings.embedding_model,
-                embedding_provider=settings.embedding_provider,
-                embedding_api_key=settings.embedding_config.api_key,
-                embedding_api_base_url=settings.embedding_config.api_base_url
+                embedding_model=settings.embedding.model,
+                embedding_provider=settings.embedding.provider,
+                embedding_api_key=settings.embedding.api_key,
+                embedding_api_base_url=settings.embedding.api_base_url
             )
             progress.update(task, advance=1)
         

@@ -168,10 +168,10 @@ def init(ctx: click.Context, output: Optional[str]):
             type=click.Choice(["openai", "anthropic", "ollama", "custom"]),
             default="openai"
         )
-        settings.llm_provider = provider
+        settings.llm.provider = provider
         
         if provider == "openai":
-            settings.llm_model = click.prompt(
+            settings.llm.model = click.prompt(
                 "OpenAI model",
                 default="gpt-3.5-turbo"
             )
@@ -181,10 +181,10 @@ def init(ctx: click.Context, output: Optional[str]):
                 hide_input=True
             )
             if api_key:
-                settings.llm_config.api_key = api_key
+                settings.llm.api_key = api_key
                 
         elif provider == "anthropic":
-            settings.llm_model = click.prompt(
+            settings.llm.model = click.prompt(
                 "Anthropic model",
                 default="claude-2"
             )
@@ -194,7 +194,7 @@ def init(ctx: click.Context, output: Optional[str]):
                 hide_input=True
             )
             if api_key:
-                settings.llm_config.api_key = api_key
+                settings.llm.api_key = api_key
         
         # Embedding settings
         embedding_provider = click.prompt(
@@ -202,15 +202,15 @@ def init(ctx: click.Context, output: Optional[str]):
             type=click.Choice(["local", "openai", "custom"]),
             default="local"
         )
-        settings.embedding_provider = embedding_provider
+        settings.embedding.provider = embedding_provider
         
         if embedding_provider == "local":
-            settings.embedding_model = click.prompt(
+            settings.embedding.model = click.prompt(
                 "Local embedding model",
                 default="sentence-transformers/all-MiniLM-L6-v2"
             )
         elif embedding_provider == "openai":
-            settings.embedding_model = click.prompt(
+            settings.embedding.model = click.prompt(
                 "OpenAI embedding model",
                 default="text-embedding-3-small"
             )
@@ -248,11 +248,11 @@ def validate(ctx: click.Context):
         # Check API keys
         warnings = []
         
-        if settings.llm_provider != "ollama" and not settings.llm_config.api_key:
-            warnings.append(f"No API key set for LLM provider '{settings.llm_provider}'")
+        if settings.llm.provider != "ollama" and not settings.llm.api_key:
+            warnings.append(f"No API key set for LLM provider '{settings.llm.provider}'")
         
-        if settings.embedding_provider not in ["local", "ollama"] and not settings.embedding_config.api_key:
-            warnings.append(f"No API key set for embedding provider '{settings.embedding_provider}'")
+        if settings.embedding.provider not in ["local", "ollama"] and not settings.embedding.api_key:
+            warnings.append(f"No API key set for embedding provider '{settings.embedding.provider}'")
         
         if warnings:
             print_warning("\nWarnings:")

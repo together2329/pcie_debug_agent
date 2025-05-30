@@ -13,7 +13,7 @@ import json
 # Add src directory to Python path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from src.config.settings import Settings
+from src.config.settings import Settings, load_settings
 from src.rag.enhanced_rag_engine import EnhancedRAGEngine
 from src.ui.interactive_chat import InteractiveChatInterface
 from src.ui.semantic_search import SemanticSearchInterface
@@ -173,11 +173,11 @@ class PCIeDebugAgentApp:
         # Use the new load_settings function which handles env vars properly
         try:
             if config_path.exists():
-                return Settings.load_settings(str(config_path))
+                return load_settings(config_path)
             else:
                 # Create default settings with env vars
                 st.warning("Configuration file not found. Using default settings with environment variables.")
-                return Settings.load_settings(None)
+                return load_settings(None)
         except Exception as e:
             self.show_error("Failed to load settings", str(e))
             st.stop()

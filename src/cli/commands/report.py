@@ -90,28 +90,28 @@ def report(
         print_info("Initializing report generator...")
         
         vector_store = FAISSVectorStore(
-            index_path=settings.vector_store_path,
-            index_type=settings.index_type,
-            dimension=settings.embedding_dimension
+            index_path=settings.vector_store.index_path,
+            index_type=settings.vector_store.index_type,
+            dimension=settings.vector_store.dimension
         )
         
-        if Path(settings.vector_store_path + ".faiss").exists():
+        if Path(settings.vector_store.index_path + ".faiss").exists():
             vector_store.load_index()
         
         model_manager = ModelManager(
-            embedding_model=settings.embedding_model,
-            embedding_provider=settings.embedding_provider,
-            embedding_api_key=settings.embedding_config.api_key,
-            llm_provider=settings.llm_provider,
-            llm_model=settings.llm_model,
-            llm_api_key=settings.llm_config.api_key
+            embedding_model=settings.embedding.model,
+            embedding_provider=settings.embedding.provider,
+            embedding_api_key=settings.embedding.api_key,
+            llm_provider=settings.llm.provider,
+            llm_model=settings.llm.model,
+            llm_api_key=settings.llm.api_key
         )
         
         engine = EnhancedRAGEngine(
             vector_store=vector_store,
             model_manager=model_manager,
-            llm_provider=settings.llm_provider,
-            llm_model=settings.llm_model
+            llm_provider=settings.llm.provider,
+            llm_model=settings.llm.model
         )
         
         # Default queries if none provided
@@ -177,8 +177,8 @@ def report(
             "statistics": statistics,
             "timeline": timeline,
             "settings": {
-                "model": settings.llm_model,
-                "provider": settings.llm_provider
+                "model": settings.llm.model,
+                "provider": settings.llm.provider
             }
         }
         

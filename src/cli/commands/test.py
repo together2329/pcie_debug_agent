@@ -43,36 +43,36 @@ def connectivity(ctx: click.Context, verbose: bool):
             task = progress.add_task("Connecting...", total=None)
             
             try:
-                if settings.llm_provider == "openai":
+                if settings.llm.provider == "openai":
                     import openai
-                    openai.api_key = settings.llm_config.api_key
-                    if settings.llm_config.api_base_url:
-                        openai.api_base = settings.llm_config.api_base_url
+                    openai.api_key = settings.llm.api_key
+                    if settings.llm.api_base_url:
+                        openai.api_base = settings.llm.api_base_url
                     
                     # Test with a simple request
                     response = openai.ChatCompletion.create(
-                        model=settings.llm_model,
+                        model=settings.llm.model,
                         messages=[{"role": "user", "content": "test"}],
                         max_tokens=5
                     )
                     results.append(["LLM API", "OpenAI", "✅ Connected", "OK"])
                     
-                elif settings.llm_provider == "anthropic":
+                elif settings.llm.provider == "anthropic":
                     import anthropic
-                    client = anthropic.Anthropic(api_key=settings.llm_config.api_key)
+                    client = anthropic.Anthropic(api_key=settings.llm.api_key)
                     response = client.completions.create(
-                        model=settings.llm_model,
+                        model=settings.llm.model,
                         prompt="test",
                         max_tokens_to_sample=5
                     )
                     results.append(["LLM API", "Anthropic", "✅ Connected", "OK"])
                     
                 else:
-                    results.append(["LLM API", settings.llm_provider, "⚠️  Untested", "Skip"])
+                    results.append(["LLM API", settings.llm.provider, "⚠️  Untested", "Skip"])
                     
             except Exception as e:
                 error_msg = str(e)[:50] + "..." if len(str(e)) > 50 else str(e)
-                results.append(["LLM API", settings.llm_provider, "❌ Failed", error_msg])
+                results.append(["LLM API", settings.llm.provider, "❌ Failed", error_msg])
             
             progress.update(task, completed=True)
         
@@ -81,27 +81,27 @@ def connectivity(ctx: click.Context, verbose: bool):
             task = progress.add_task("Connecting...", total=None)
             
             try:
-                if settings.embedding_provider == "openai":
+                if settings.embedding.provider == "openai":
                     import openai
-                    openai.api_key = settings.embedding_config.api_key
+                    openai.api_key = settings.embedding.api_key
                     response = openai.Embedding.create(
-                        model=settings.embedding_model,
+                        model=settings.embedding.model,
                         input="test"
                     )
                     results.append(["Embedding API", "OpenAI", "✅ Connected", "OK"])
                     
-                elif settings.embedding_provider == "local":
+                elif settings.embedding.provider == "local":
                     from sentence_transformers import SentenceTransformer
-                    model = SentenceTransformer(settings.embedding_model)
+                    model = SentenceTransformer(settings.embedding.model)
                     embedding = model.encode("test")
                     results.append(["Embedding API", "Local", "✅ Loaded", f"Dim: {len(embedding)}"])
                     
                 else:
-                    results.append(["Embedding API", settings.embedding_provider, "⚠️  Untested", "Skip"])
+                    results.append(["Embedding API", settings.embedding.provider, "⚠️  Untested", "Skip"])
                     
             except Exception as e:
                 error_msg = str(e)[:50] + "..." if len(str(e)) > 50 else str(e)
-                results.append(["Embedding API", settings.embedding_provider, "❌ Failed", error_msg])
+                results.append(["Embedding API", settings.embedding.provider, "❌ Failed", error_msg])
             
             progress.update(task, completed=True)
         
@@ -112,10 +112,10 @@ def connectivity(ctx: click.Context, verbose: bool):
             try:
                 from src.rag.vector_store import FAISSVectorStore
                 
-                if Path(settings.vector_store_path + ".faiss").exists():
+                if Path(settings.vector_store.index_path + ".faiss").exists():
                     store = FAISSVectorStore(
-                        index_path=settings.vector_store_path,
-                        dimension=settings.embedding_dimension
+                        index_path=settings.vector_store.index_path,
+                        dimension=settings.vector_store.dimension
                     )
                     store.load_index()
                     results.append([
@@ -180,20 +180,20 @@ def performance(ctx: click.Context, sample_size: int):
         
         # Initialize components
         vector_store = FAISSVectorStore(
-            index_path=settings.vector_store_path,
-            dimension=settings.embedding_dimension
+            index_path=settings.vector_store.index_path,
+            dimension=settings.vector_store.dimension
         )
         
-        if not Path(settings.vector_store_path + ".faiss").exists():
+        if not Path(settings.vector_store.index_path + ".faiss").exists():
             print_error("No vector store index found. Run 'pcie-debug index build' first.")
             sys.exit(1)
         
         vector_store.load_index()
         
         model_manager = ModelManager(
-            embedding_model=settings.embedding_model,
-            embedding_provider=settings.embedding_provider,
-            embedding_api_key=settings.embedding_config.api_key
+            embedding_model=settings.embedding.model,
+            embedding_provider=settings.embedding.provider,
+            embedding_api_key=settings.embedding.api_key
         )
         
         # Test 1: Embedding generation speed

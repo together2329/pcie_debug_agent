@@ -10,7 +10,7 @@ import os
 import yaml
 import streamlit as st
 
-from config.settings import Settings
+from config.settings import Settings, load_settings
 from rag.enhanced_rag_engine import EnhancedRAGEngine
 from ui.interactive_chat import InteractiveChatInterface
 from ui.semantic_search import SemanticSearchInterface
@@ -28,16 +28,16 @@ def setup_logging():
         ]
     )
 
-def load_settings() -> Settings:
+def load_app_settings() -> Settings:
     """설정 파일 로드"""
     config_path = Path("configs/settings.yaml")
     
     if config_path.exists():
-        settings = Settings.load_settings(str(config_path))
+        settings = load_settings(config_path)
     else:
         # Create default settings with env vars
         print("Configuration file not found. Using default settings with environment variables.")
-        settings = Settings.load_settings(None)
+        settings = load_settings(None)
     
     settings.validate()
     return settings
@@ -312,7 +312,7 @@ def main():
     args = parser.parse_args()
     
     setup_logging()
-    settings = load_settings()
+    settings = load_app_settings()
     
     if args.cli:
         run_cli_interface(settings)
