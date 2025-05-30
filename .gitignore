@@ -48,4 +48,19 @@ docker-compose.override.yml
 
 # OS
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Testing and Coverage
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+.cache/
+
+# Temporary test files
+test_*.py
+fix_*.py
+
+# Local development files
+sample_logs/
+temp_*/ 
