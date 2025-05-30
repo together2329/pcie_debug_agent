@@ -119,41 +119,157 @@ def create_sidebar():
     # Get model manager
     model_manager = st.session_state.model_manager
     
-    # Embedding Model
-    embedding_models = model_manager.embedding_manager.SUPPORTED_MODELS
-    selected_embedding = st.sidebar.selectbox(
-        "Embedding Model",
-        options=list(embedding_models.keys()),
-        format_func=lambda x: embedding_models[x].name,
-        help="Choose the embedding model for document vectorization"
+    # Embedding Model Provider
+    embedding_providers = ["Local", "OpenAI", "Cohere", "Voyage", "Custom"]
+    embedding_provider = st.sidebar.selectbox(
+        "Embedding Provider",
+        options=embedding_providers,
+        help="Choose embedding model provider"
     )
     
+    # Embedding Model based on provider
+    if embedding_provider == "Local":
+        embedding_models = [
+            "sentence-transformers/all-MiniLM-L6-v2",
+            "sentence-transformers/all-mpnet-base-v2",
+            "sentence-transformers/all-MiniLM-L12-v2",
+            "sentence-transformers/multi-qa-mpnet-base-dot-v1",
+            "sentence-transformers/all-roberta-large-v1"
+        ]
+    elif embedding_provider == "OpenAI":
+        embedding_models = [
+            "openai/text-embedding-ada-002",
+            "openai/text-embedding-3-small",
+            "openai/text-embedding-3-large"
+        ]
+    elif embedding_provider == "Cohere":
+        embedding_models = ["cohere/embed-english-v3.0"]
+    elif embedding_provider == "Voyage":
+        embedding_models = ["voyage/voyage-01"]
+    else:  # Custom
+        embedding_models = ["custom/api"]
+    
+    selected_embedding = st.sidebar.selectbox(
+        "Embedding Model",
+        options=embedding_models,
+        help="Choose the embedding model"
+    )
+    
+    # Show model info
     if selected_embedding:
-        model_info = embedding_models[selected_embedding]
-        st.sidebar.info(f"{model_info.description}\nMemory: {model_info.memory_usage}")
+        model_info = model_manager.embedding_manager.get_model_info(selected_embedding)
+        if model_info:
+            st.sidebar.info(f"{model_info.description}")
+    
+    # Embedding API Configuration
+    if embedding_provider != "Local":
+        st.sidebar.subheader("Embedding API Configuration")
+        
+        if embedding_provider in ["OpenAI", "Cohere", "Voyage"]:
+            embedding_api_key = st.sidebar.text_input(
+                f"{embedding_provider} API Key",
+                type="password",
+                help=f"Your {embedding_provider} API key"
+            )
+            embedding_base_url = None
+            embedding_headers = None
+            embedding_dimension = model_info.dimension if model_info else 768
+        else:  # Custom
+            embedding_api_key = st.sidebar.text_input(
+                "API Key (Optional)",
+                type="password",
+                help="API key if required"
+            )
+            embedding_base_url = st.sidebar.text_input(
+                "Embedding API Base URL",
+                placeholder="https://api.example.com/v1/embeddings",
+                help="Base URL for custom embedding API"
+            )
+            
+            embedding_headers = st.sidebar.text_area(
+                "Additional Headers (JSON)",
+                placeholder='{"X-Custom-Header": "value"}',
+                help="Additional headers for API requests"
+            )
+            
+            embedding_dimension = st.sidebar.number_input(
+                "Embedding Dimension",
+                min_value=1,
+                max_value=4096,
+                value=768,
+                help="Dimension of the embedding vectors"
+            )
+    else:
+        embedding_api_key = None
+        embedding_base_url = None
+        embedding_headers = None
+        embedding_dimension = model_manager.embedding_manager.get_model_info(selected_embedding).dimension
+    
+    # Test Embedding API Connection
+    if embedding_provider != "Local":
+        if st.sidebar.button("🔌 Test Embedding API", key="test_embedding_api"):
+            with st.spinner("Testing embedding API connection..."):
+                try:
+                    # Configure API
+                    if embedding_provider == "Custom":
+                        headers = json.loads(embedding_headers) if embedding_headers else {}
+                        model_manager.configure_embedding_api(
+                            selected_embedding,
+                            api_key=embedding_api_key,
+                            base_url=embedding_base_url,
+                            headers=headers
+                        )
+                    else:
+                        model_manager.configure_embedding_api(
+                            selected_embedding,
+                            api_key=embedding_api_key,
+                            base_url=embedding_base_url if embedding_base_url else None
+                        )
+                    
+                    # Test connection with a sample text
+                    test_text = "This is a test sentence for embedding API connection."
+                    result = model_manager.test_embedding_api(
+                        text=test_text,
+                        model_name=selected_embedding
+                    )
+                    
+                    if result['success']:
+                        st.sidebar.success("✅ " + result['message'])
+                        st.session_state.api_test_results['embedding'] = result
+                        
+                        # Show embedding dimension if successful
+                        if 'dimension' in result:
+                            st.sidebar.info(f"Embedding dimension: {result['dimension']}")
+                    else:
+                        st.sidebar.error("❌ " + result['message'])
+                except Exception as e:
+                    st.sidebar.error(f"❌ Error: {str(e)}")
+    
+    st.sidebar.markdown("---")
     
     # LLM Provider
-    llm_providers = model_manager.llm_manager.SUPPORTED_MODELS
+    llm_providers = ["openai", "anthropic", "ollama", "custom"]
     llm_provider = st.sidebar.selectbox(
         "LLM Provider",
-        options=list(llm_providers.keys()),
-        format_func=lambda x: x.capitalize()
+        options=llm_providers,
+        format_func=lambda x: x.capitalize(),
+        help="Choose LLM provider"
     )
     
     # LLM Model
-    llm_models = llm_providers[llm_provider]
+    llm_models = model_manager.llm_manager.SUPPORTED_MODELS.get(llm_provider, {})
     llm_model = st.sidebar.selectbox(
         "LLM Model",
         options=list(llm_models.keys()),
-        format_func=lambda x: llm_models[x].name
+        format_func=lambda x: llm_models[x].name if x in llm_models else x
     )
     
-    if llm_model:
+    if llm_model and llm_model in llm_models:
         model_info = llm_models[llm_model]
-        st.sidebar.info(f"{model_info.description}\nContext: {model_info.context_window:,} tokens")
+        st.sidebar.info(f"{model_info.description}")
     
-    # API Keys
-    st.sidebar.header("API Configuration")
+    # LLM API Configuration
+    st.sidebar.subheader("LLM API Configuration")
     
     if llm_provider == "openai":
         openai_api_key = st.sidebar.text_input(
@@ -161,15 +277,107 @@ def create_sidebar():
             type="password",
             help="Your OpenAI API key"
         )
+        openai_base_url = st.sidebar.text_input(
+            "OpenAI Base URL (Optional)",
+            placeholder="https://api.openai.com",
+            help="Custom OpenAI-compatible API endpoint"
+        )
+        custom_headers = None
     elif llm_provider == "anthropic":
         anthropic_api_key = st.sidebar.text_input(
             "Anthropic API Key",
             type="password",
             help="Your Anthropic API key"
         )
-    else:
-        openai_api_key = None
-        anthropic_api_key = None
+        anthropic_base_url = st.sidebar.text_input(
+            "Anthropic Base URL (Optional)",
+            placeholder="https://api.anthropic.com",
+            help="Custom Anthropic API endpoint"
+        )
+        custom_headers = None
+    elif llm_provider == "ollama":
+        ollama_base_url = st.sidebar.text_input(
+            "Ollama Base URL",
+            value="http://localhost:11434",
+            help="Ollama API endpoint"
+        )
+        custom_headers = None
+    elif llm_provider == "custom":
+        custom_api_key = st.sidebar.text_input(
+            "API Key (Optional)",
+            type="password",
+            help="API key if required"
+        )
+        custom_base_url = st.sidebar.text_input(
+            "LLM API Base URL",
+            placeholder="https://api.example.com/v1/chat",
+            help="Base URL for custom LLM API"
+        )
+        custom_headers = st.sidebar.text_area(
+            "Additional Headers (JSON)",
+            placeholder='{"X-Custom-Header": "value"}',
+            help="Additional headers for API requests"
+        )
+    
+    # Test LLM API Connection
+    if st.sidebar.button("🔌 Test LLM API", key="test_llm_api"):
+        with st.spinner("Testing LLM API connection..."):
+            try:
+                # Configure and initialize API
+                if llm_provider == "openai":
+                    model_manager.configure_llm_api(
+                        llm_provider,
+                        api_key=openai_api_key,
+                        base_url=openai_base_url if openai_base_url else None
+                    )
+                    model_manager.initialize_llm(
+                        llm_provider,
+                        api_key=openai_api_key,
+                        base_url=openai_base_url if openai_base_url else None
+                    )
+                elif llm_provider == "anthropic":
+                    model_manager.configure_llm_api(
+                        llm_provider,
+                        api_key=anthropic_api_key,
+                        base_url=anthropic_base_url if anthropic_base_url else None
+                    )
+                    model_manager.initialize_llm(
+                        llm_provider,
+                        api_key=anthropic_api_key,
+                        base_url=anthropic_base_url if anthropic_base_url else None
+                    )
+                elif llm_provider == "ollama":
+                    model_manager.initialize_llm(
+                        llm_provider,
+                        base_url=ollama_base_url
+                    )
+                elif llm_provider == "custom":
+                    headers = json.loads(custom_headers) if custom_headers else {}
+                    model_manager.configure_llm_api(
+                        llm_provider,
+                        api_key=custom_api_key,
+                        base_url=custom_base_url,
+                        headers=headers
+                    )
+                    model_manager.initialize_llm(
+                        llm_provider,
+                        api_key=custom_api_key,
+                        base_url=custom_base_url,
+                        headers=headers
+                    )
+                
+                # Test connection
+                result = model_manager.test_api_connection("llm", llm_provider, llm_model)
+                
+                if result['success']:
+                    st.sidebar.success("✅ " + result['message'])
+                    st.session_state.api_test_results['llm'] = result
+                else:
+                    st.sidebar.error("❌ " + result['message'])
+            except Exception as e:
+                st.sidebar.error(f"❌ Error: {str(e)}")
+    
+    st.sidebar.markdown("---")
     
     # Processing Settings
     st.sidebar.header("Processing Settings")
@@ -249,7 +457,10 @@ def create_sidebar():
         "embedding": {
             "model": selected_embedding,
             "batch_size": batch_size,
-            "dimension": embedding_models[selected_embedding].dimension
+            "dimension": embedding_dimension,
+            "api_key": embedding_api_key,
+            "base_url": embedding_base_url,
+            "headers": json.loads(embedding_headers) if embedding_headers else {}
         },
         "llm": {
             "provider": llm_provider,
@@ -257,7 +468,13 @@ def create_sidebar():
             "temperature": temperature,
             "max_tokens": max_tokens,
             "openai_api_key": openai_api_key if llm_provider == "openai" else None,
-            "anthropic_api_key": anthropic_api_key if llm_provider == "anthropic" else None
+            "openai_base_url": openai_base_url if llm_provider == "openai" else None,
+            "anthropic_api_key": anthropic_api_key if llm_provider == "anthropic" else None,
+            "anthropic_base_url": anthropic_base_url if llm_provider == "anthropic" else None,
+            "ollama_base_url": ollama_base_url if llm_provider == "ollama" else None,
+            "custom_api_key": custom_api_key if llm_provider == "custom" else None,
+            "custom_base_url": custom_base_url if llm_provider == "custom" else None,
+            "custom_headers": json.loads(custom_headers) if llm_provider == "custom" and custom_headers else {}
         },
         "rag": {
             "chunk_size": chunk_size,
@@ -754,6 +971,82 @@ def run_analysis(settings_dict: Dict[str, Any], start_time: Optional[str] = None
         
     except Exception as e:
         return False, f"Error during analysis: {str(e)}"
+
+def generate_html_report(errors_df: pd.DataFrame) -> str:
+    """Generate HTML report from error analysis"""
+    html_template = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>UVM Error Analysis Report</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            .header { text-align: center; margin-bottom: 30px; }
+            .summary { margin-bottom: 20px; }
+            .error-table { width: 100%; border-collapse: collapse; }
+            .error-table th, .error-table td { 
+                border: 1px solid #ddd; 
+                padding: 8px; 
+                text-align: left; 
+            }
+            .error-table th { background-color: #f5f5f5; }
+            .fatal { color: #c0392b; }
+            .error { color: #e74c3c; }
+            .warning { color: #f1c40f; }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>UVM Error Analysis Report</h1>
+            <p>Generated on: {timestamp}</p>
+        </div>
+        
+        <div class="summary">
+            <h2>Summary</h2>
+            <p>Total Errors: {total_errors}</p>
+            <p>Fatal Errors: {fatal_count}</p>
+            <p>Errors: {error_count}</p>
+            <p>Warnings: {warning_count}</p>
+        </div>
+        
+        <h2>Error Details</h2>
+        <table class="error-table">
+            <tr>
+                <th>Timestamp</th>
+                <th>Severity</th>
+                <th>Component</th>
+                <th>Message</th>
+            </tr>
+            {error_rows}
+        </table>
+    </body>
+    </html>
+    """
+    
+    # Generate error rows
+    error_rows = ""
+    for _, row in errors_df.iterrows():
+        severity_class = row['severity'].lower()
+        error_rows += f"""
+        <tr>
+            <td>{row['timestamp']}</td>
+            <td class="{severity_class}">{row['severity']}</td>
+            <td>{row['component']}</td>
+            <td>{row['message']}</td>
+        </tr>
+        """
+    
+    # Fill template
+    report_html = html_template.format(
+        timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        total_errors=len(errors_df),
+        fatal_count=len(errors_df[errors_df['severity'] == 'FATAL']),
+        error_count=len(errors_df[errors_df['severity'] == 'ERROR']),
+        warning_count=len(errors_df[errors_df['severity'] == 'WARNING']),
+        error_rows=error_rows
+    )
+    
+    return report_html
 
 def main():
     st.title("🔍 UVM Debug Agent")

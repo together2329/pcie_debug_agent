@@ -12,6 +12,8 @@ class EmbeddingConfig:
     model: str
     batch_size: int
     dimension: int
+    api_key: Optional[str] = None
+    api_base_url: Optional[str] = None
 
 @dataclass
 class LLMConfig:
@@ -20,8 +22,8 @@ class LLMConfig:
     model: str
     temperature: float
     max_tokens: int
-    openai_api_key: Optional[str] = None
-    anthropic_api_key: Optional[str] = None
+    api_key: Optional[str] = None
+    api_base_url: Optional[str] = None
 
 @dataclass
 class RAGConfig:
@@ -55,6 +57,8 @@ class Settings(BaseSettings):
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_batch_size: int = 32
     embedding_dimension: int = 384
+    embedding_api_key: Optional[str] = Field(default=None, env="EMBEDDING_API_KEY")
+    embedding_api_base_url: Optional[str] = Field(default=None, env="EMBEDDING_API_BASE_URL")
     
     # Vector store settings
     vector_store_type: str = "faiss"
@@ -65,8 +69,8 @@ class Settings(BaseSettings):
     llm_model: str = "gpt-4"
     llm_temperature: float = 0.1
     llm_max_tokens: int = 2000
-    openai_api_key: Optional[str] = Field(default=None, env="OPENAI_API_KEY")
-    anthropic_api_key: Optional[str] = Field(default=None, env="ANTHROPIC_API_KEY")
+    llm_api_key: Optional[str] = Field(default=None, env="LLM_API_KEY")
+    llm_api_base_url: Optional[str] = Field(default=None, env="LLM_API_BASE_URL")
     
     # RAG settings
     chunk_size: int = 500
@@ -87,6 +91,29 @@ class Settings(BaseSettings):
         """Load settings from YAML file"""
         with open(config_path, 'r') as f:
             config_data = yaml.safe_load(f)
+            
+        # Extract nested configs
+        if 'embedding' in config_data:
+            embedding_config = config_data.pop('embedding')
+            config_data.update({
+                'embedding_model': embedding_config.get('model'),
+                'embedding_batch_size': embedding_config.get('batch_size'),
+                'embedding_dimension': embedding_config.get('dimension'),
+                'embedding_api_key': embedding_config.get('api_key'),
+                'embedding_api_base_url': embedding_config.get('api_base_url')
+            })
+            
+        if 'llm' in config_data:
+            llm_config = config_data.pop('llm')
+            config_data.update({
+                'llm_provider': llm_config.get('provider'),
+                'llm_model': llm_config.get('model'),
+                'llm_temperature': llm_config.get('temperature'),
+                'llm_max_tokens': llm_config.get('max_tokens'),
+                'llm_api_key': llm_config.get('api_key'),
+                'llm_api_base_url': llm_config.get('api_base_url')
+            })
+            
         return cls(**config_data)
     
     def validate(self) -> bool:
@@ -97,10 +124,8 @@ class Settings(BaseSettings):
                 raise ValueError(f"Log directory does not exist: {log_dir}")
         
         # Validate API keys
-        if self.llm_provider == 'openai' and not self.openai_api_key:
-            raise ValueError("OpenAI API key is required for OpenAI provider")
-        elif self.llm_provider == 'anthropic' and not self.anthropic_api_key:
-            raise ValueError("Anthropic API key is required for Anthropic provider")
+        if self.llm_provider in ['openai', 'anthropic'] and not self.llm_api_key:
+            raise ValueError(f"{self.llm_provider.capitalize()} API key is required")
         
         # Validate numeric values
         if self.embedding_batch_size <= 0:

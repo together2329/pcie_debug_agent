@@ -1,4 +1,4 @@
-ㅇ argparse
+import argparse
 import logging
 from pathlib import Path
 from datetime import datetime
@@ -13,6 +13,7 @@ from vectorstore.faiss_store import FAISSVectorStore
 from rag.retriever import Retriever
 from rag.analyzer import Analyzer
 from reports.report_generator import ReportGenerator
+from model_manager import ModelManager
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,24 @@ def collect_errors(settings: Settings, start_time: str = None) -> List[UVMError]
 
 def process_documents(settings: Settings) -> List[Dict[str, Any]]:
     """문서 처리 및 임베딩"""
+    # ModelManager 초기화
+    model_manager = ModelManager()
+    
+    # API 설정
+    if settings.embedding_api_key:
+        model_manager.configure_embedding_api(
+            settings.embedding_model,
+            api_key=settings.embedding_api_key,
+            base_url=settings.embedding_api_base_url
+        )
+    
+    if settings.llm_api_key:
+        model_manager.configure_llm_api(
+            settings.llm_provider,
+            api_key=settings.llm_api_key,
+            base_url=settings.llm_api_base_url
+        )
+    
     # 문서 청커 초기화
     doc_chunker = DocumentChunker(
         chunk_size=settings.chunk_size,
@@ -57,6 +76,7 @@ def process_documents(settings: Settings) -> List[Dict[str, Any]]:
     
     # 임베더 초기화
     embedder = Embedder(
+        model_manager=model_manager,
         model_name=settings.embedding_model,
         batch_size=settings.embedding_batch_size
     )
@@ -104,8 +124,27 @@ def analyze_errors(settings: Settings,
                   errors: List[UVMError],
                   chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """에러 분석"""
+    # ModelManager 초기화
+    model_manager = ModelManager()
+    
+    # API 설정
+    if settings.embedding_api_key:
+        model_manager.configure_embedding_api(
+            settings.embedding_model,
+            api_key=settings.embedding_api_key,
+            base_url=settings.embedding_api_base_url
+        )
+    
+    if settings.llm_api_key:
+        model_manager.configure_llm_api(
+            settings.llm_provider,
+            api_key=settings.llm_api_key,
+            base_url=settings.llm_api_base_url
+        )
+    
     # 임베더 초기화
     embedder = Embedder(
+        model_manager=model_manager,
         model_name=settings.embedding_model,
         batch_size=settings.embedding_batch_size
     )
@@ -124,11 +163,11 @@ def analyze_errors(settings: Settings,
     
     # 분석기 초기화
     analyzer = Analyzer(
-        llm_provider=settings.llm_provider,
+        model_manager=model_manager,
+        provider=settings.llm_provider,
         model=settings.llm_model,
         temperature=settings.llm_temperature,
-        max_tokens=settings.llm_max_tokens,
-        api_key=settings.openai_api_key
+        max_tokens=settings.llm_max_tokens
     )
     
     # 에러 분석
