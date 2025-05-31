@@ -75,9 +75,8 @@ models/
 ~/.ollama/
 .ollama/
 
-# DeepSeek and other large models
-*deepseek*
-*llama*
-*mistral*
-*gemma*
-*qwen* 
+# Large model result files (but allow code files)
+*deepseek_vs_llama_test_*.json
+*deepseek*test*.py
+*llama*test*.py
+hybrid_llm_test_results_*.json 

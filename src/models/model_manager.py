@@ -206,7 +206,30 @@ class LLMModelManager:
                 context_window=16384,
                 memory_usage="~13GB"
             )
-        }
+,
+        "hybrid": {
+            "llama-3.2-3b-quick": ModelInfo(
+                name="Llama 3.2 3B (Quick Analysis)",
+                provider="hybrid",
+                description="Fast PCIe error analysis",
+                context_window=16384,
+                memory_usage="~1.8GB"
+            ),
+            "deepseek-r1-detailed": ModelInfo(
+                name="DeepSeek R1 (Detailed Analysis)",
+                provider="hybrid",
+                description="Comprehensive PCIe analysis",
+                context_window=32768,
+                memory_usage="~5.2GB"
+            ),
+            "auto-hybrid": ModelInfo(
+                name="Auto Hybrid Selection",
+                provider="hybrid",
+                description="Automatically selects best model",
+                context_window=16384,
+                memory_usage="~1.8-5.2GB"
+            )
+        }        }
     }
     
     def __init__(self):
@@ -235,6 +258,16 @@ class LLMModelManager:
             except ImportError as e:
                 logger.warning(f"Local LLM not available: {e}")
                 self._clients["local"] = None
+                
+        
+        elif provider == "hybrid":
+            # Initialize hybrid model handler
+            try:
+                from src.models.hybrid_llm_provider import HybridLLMProvider
+                self._clients["hybrid"] = HybridLLMProvider(**kwargs)
+            except ImportError as e:
+                logger.warning(f"Hybrid LLM not available: {e}")
+                self._clients["hybrid"] = None
                 
         else:
             raise ValueError(f"Unsupported provider: {provider}")
@@ -299,6 +332,31 @@ class LLMModelManager:
                     temperature=temperature,
                     **kwargs
                 )
+                
+            
+            elif provider == "hybrid":
+                if self._clients["hybrid"] is None:
+                    raise RuntimeError("Hybrid models not available")
+                    
+                # Use HybridLLMProvider
+                hybrid_provider = self._clients["hybrid"]
+                
+                # Determine analysis type from model name or kwargs
+                analysis_type = "auto"
+                if "quick" in model.lower():
+                    analysis_type = "quick"
+                elif "detailed" in model.lower():
+                    analysis_type = "detailed"
+                
+                from src.models.hybrid_llm_provider import AnalysisRequest
+                request = AnalysisRequest(
+                    query=prompt,
+                    analysis_type=analysis_type,
+                    max_response_time=kwargs.get("timeout", 30.0)
+                )
+                
+                response = hybrid_provider.analyze_pcie_error(request)
+                return response.response if response.response else "Analysis failed"
                 
             else:
                 raise ValueError(f"Unsupported provider: {provider}")
@@ -391,6 +449,11 @@ class ModelManager:
             "estimated_cost": 0.0
         }
         
+    
+    def list_available_models(self, provider: Optional[str] = None) -> Dict[str, List[str]]:
+        """List available models across all providers"""
+        return self.llm_manager.list_available_models(provider)
+    
     def get_model_recommendations(self, use_case: str) -> Dict[str, Any]:
         """Get model recommendations for specific use case"""
         recommendations = {
@@ -411,6 +474,12 @@ class ModelManager:
                 "llm_provider": "local",
                 "llm_model": "llama-3.2-3b-instruct",
                 "reason": "Works without internet connection, optimized for M1 Mac"
+            },
+            "hybrid_analysis": {
+                "embedding": "sentence-transformers/all-MiniLM-L12-v2",
+                "llm_provider": "hybrid",
+                "llm_model": "auto-hybrid",
+                "reason": "Best of both worlds - fast for simple, detailed for complex"
             },
             "cost_optimized": {
                 "embedding": "sentence-transformers/all-MiniLM-L6-v2",
