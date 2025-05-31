@@ -61,12 +61,18 @@ reg [7:0]  pending_tag;
 reg        pending_request;
 reg [31:0] mem_array [0:255];  // Simple memory model
 
-// Initialize
+// Initialize and VCD dump
 initial begin
     ltssm_state = LTSSM_DETECT;
     link_up = 1'b0;
     link_speed = 3'b011;  // Gen3
     link_width = 5'b10000; // x16
+    
+    // VCD dump for waveform viewing
+    `ifdef COCOTB_SIM
+        $dumpfile("pcie_lite.vcd");
+        $dumpvars(0, pcie_lite);
+    `endif
 end
 
 // LTSSM State Machine

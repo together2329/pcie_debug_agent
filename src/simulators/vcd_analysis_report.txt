@@ -1,0 +1,323 @@
+
+PCIe VCD Analysis Report
+========================
+Generated: 2025-05-31 11:07:48
+Source: pcie_waveform.vcd
+
+## Summary Statistics
+- Total Events: 47
+- Transactions: 16
+- Errors Detected: 2
+- LTSSM State Changes: 28
+
+## Error Analysis
+Error Distribution:
+  - MALFORMED_TLP: 2 occurrences
+
+Error Timeline:
+  [Time: 2920000ns] PCIe Error
+  - error_type: MALFORMED_TLP
+  - ltssm_state: L0
+
+  [Time: 2925000ns] PCIe Error
+  - error_type: MALFORMED_TLP
+  - ltssm_state: L0
+
+
+## Transaction Analysis
+Transaction Types:
+  - Memory Read: 8
+  - Memory Write: 6
+  - Type_7: 2
+
+## State Machine Analysis
+LTSSM State Progression:
+  1. [5000ns] UNKNOWN → DETECT
+  2. [110000ns] DETECT → POLLING
+  3. [120000ns] POLLING → CONFIG
+  4. [130000ns] CONFIG → L0
+  5. [680000ns] L0 → RECOVERY
+  6. [690000ns] RECOVERY → L0
+  7. [700000ns] L0 → RECOVERY
+  8. [710000ns] RECOVERY → L0
+  9. [720000ns] L0 → RECOVERY
+  10. [730000ns] RECOVERY → L0
+
+## Detected Patterns
+
+[Time: 0ns] Pattern: Excessive Recovery
+  - recovery_count: 12
+  - severity: HIGH
+  - recommendation: Check signal integrity and power delivery
+
+
+RAG Text Chunks:
+==================================================
+
+PCIe Waveform Analysis Summary
+Source: pcie_waveform.vcd
+Total Events: 47
+Transactions: 16
+Errors: 2
+State Changes: 28
+
+
+[Time: 5000ns] LTSSM State Change
+  - new_state: DETECT
+  - previous_state: UNKNOWN
+
+
+[Time: 110000ns] LTSSM State Change
+  - new_state: POLLING
+  - previous_state: DETECT
+
+
+[Time: 120000ns] LTSSM State Change
+  - new_state: CONFIG
+  - previous_state: POLLING
+
+
+[Time: 130000ns] LTSSM State Change
+  - new_state: L0
+  - previous_state: CONFIG
+
+
+[Time: 260000ns] PCIe Transaction
+  - type: Memory Read
+  - address: 0x00001000
+  - tag: 1
+
+
+[Time: 265000ns] PCIe Transaction
+  - type: Memory Read
+  - address: 0x00001000
+  - tag: 1
+
+
+[Time: 470000ns] PCIe Transaction
+  - type: Memory Write
+  - address: 0x00002000
+  - tag: 2
+
+
+[Time: 475000ns] PCIe Transaction
+  - type: Memory Write
+  - address: 0x00002000
+  - tag: 2
+
+
+[Time: 680000ns] LTSSM State Change
+  - new_state: RECOVERY
+  - previous_state: L0
+
+
+[Time: 690000ns] LTSSM State Change
+  - new_state: L0
+  - previous_state: RECOVERY
+
+
+[Time: 700000ns] LTSSM State Change
+  - new_state: RECOVERY
+  - previous_state: L0
+
+
+[Time: 710000ns] LTSSM State Change
+  - new_state: L0
+  - previous_state: RECOVERY
+
+
+[Time: 720000ns] LTSSM State Change
+  - new_state: RECOVERY
+  - previous_state: L0
+
+
+[Time: 730000ns] PCIe Transaction
+  - type: Memory Read
+  - address: 0x00003000
+  - tag: 3
+
+
+[Time: 730000ns] LTSSM State Change
+  - new_state: L0
+  - previous_state: RECOVERY
+
+
+[Time: 735000ns] PCIe Transaction
+  - type: Memory Read
+  - address: 0x00003000
+  - tag: 3
+
+
+[Time: 740000ns] LTSSM State Change
+  - new_state: RECOVERY
+  - previous_state: L0
+
+
+[Time: 750000ns] LTSSM State Change
+  - new_state: L0
+  - previous_state: RECOVERY
+
+
+[Time: 760000ns] LTSSM State Change
+  - new_state: RECOVERY
+  - previous_state: L0
+
+
+[Time: 770000ns] LTSSM State Change
+  - new_state: L0
+  - previous_state: RECOVERY
+
+
+[Time: 780000ns] LTSSM State Change
+  - new_state: RECOVERY
+  - previous_state: L0
+
+
+[Time: 790000ns] LTSSM State Change
+  - new_state: L0
+  - previous_state: RECOVERY
+
+
+[Time: 1490000ns] PCIe Transaction
+  - type: Memory Read
+  - address: 0x00004000
+  - tag: 4
+
+
+[Time: 1495000ns] PCIe Transaction
+  - type: Memory Read
+  - address: 0x00004000
+  - tag: 4
+
+
+[Time: 2600000ns] LTSSM State Change
+  - new_state: RECOVERY
+  - previous_state: L0
+
+
+[Time: 2610000ns] LTSSM State Change
+  - new_state: L0
+  - previous_state: RECOVERY
+
+
+[Time: 2620000ns] LTSSM State Change
+  - new_state: RECOVERY
+  - previous_state: L0
+
+
+[Time: 2630000ns] LTSSM State Change
+  - new_state: L0
+  - previous_state: RECOVERY
+
+
+[Time: 2640000ns] LTSSM State Change
+  - new_state: RECOVERY
+  - previous_state: L0
+
+
+[Time: 2650000ns] PCIe Transaction
+  - type: Memory Write
+  - address: 0x00005000
+  - tag: 5
+
+
+[Time: 2650000ns] LTSSM State Change
+  - new_state: L0
+  - previous_state: RECOVERY
+
+
+[Time: 2655000ns] PCIe Transaction
+  - type: Memory Write
+  - address: 0x00005000
+  - tag: 5
+
+
+[Time: 2660000ns] LTSSM State Change
+  - new_state: RECOVERY
+  - previous_state: L0
+
+
+[Time: 2670000ns] LTSSM State Change
+  - new_state: L0
+  - previous_state: RECOVERY
+
+
+[Time: 2680000ns] LTSSM State Change
+  - new_state: RECOVERY
+  - previous_state: L0
+
+
+[Time: 2690000ns] LTSSM State Change
+  - new_state: L0
+  - previous_state: RECOVERY
+
+
+[Time: 2700000ns] LTSSM State Change
+  - new_state: RECOVERY
+  - previous_state: L0
+
+
+[Time: 2710000ns] LTSSM State Change
+  - new_state: L0
+  - previous_state: RECOVERY
+
+
+[Time: 2910000ns] PCIe Transaction
+  - type: Type_7
+  - address: 0x00006000
+  - tag: 6
+
+
+[Time: 2915000ns] PCIe Transaction
+  - type: Type_7
+  - address: 0x00006000
+  - tag: 6
+
+
+[Time: 2920000ns] PCIe Error
+  - error_type: MALFORMED_TLP
+  - ltssm_state: L0
+
+
+[Time: 2925000ns] PCIe Error
+  - error_type: MALFORMED_TLP
+  - ltssm_state: L0
+
+
+[Time: 3170000ns] PCIe Transaction
+  - type: Memory Read
+  - address: 0x00007000
+  - tag: 7
+
+
+[Time: 3175000ns] PCIe Transaction
+  - type: Memory Read
+  - address: 0x00007000
+  - tag: 7
+
+
+[Time: 3380000ns] PCIe Transaction
+  - type: Memory Write
+  - address: 0x00008000
+  - tag: 8
+
+
+[Time: 3385000ns] PCIe Transaction
+  - type: Memory Write
+  - address: 0x00008000
+  - tag: 8
+
+
+[Time: 0ns] Pattern: Excessive Recovery
+  - recovery_count: 12
+  - severity: HIGH
+  - recommendation: Check signal integrity and power delivery
+
+
+Detected Patterns and Anomalies:
+
+[Time: 0ns] Pattern: Excessive Recovery
+  - recovery_count: 12
+  - severity: HIGH
+  - recommendation: Check signal integrity and power delivery
+

@@ -1,0 +1,109 @@
+
+PCIe VCD Error Analysis Report
+==============================
+Generated: 2025-05-31 11:19:35
+Source: pcie_waveform.vcd
+
+## Executive Summary
+Total Errors Analyzed: 2
+Root Causes Identified: 1
+Critical Issues: 0
+
+## Error Timeline Analysis
+
+### Error 1: MALFORMED_TLP at 2920000ns
+LTSSM State: L0
+Recovery Attempts Before Error: 3
+
+Preceding Events:
+  - [2710000ns] LTSSM State Change
+  - [2910000ns] PCIe Transaction
+  - [2915000ns] PCIe Transaction
+
+### Error 2: MALFORMED_TLP at 2925000ns
+LTSSM State: L0
+Recovery Attempts Before Error: 3
+
+Preceding Events:
+  - [2910000ns] PCIe Transaction
+  - [2915000ns] PCIe Transaction
+  - [2920000ns] PCIe Error
+
+## Timing Analysis
+Average Transaction Latency: 0ns
+Maximum Transaction Latency: 0ns
+Timeout Events: 0
+Average Recovery Duration: 10000ns
+
+## Root Cause Analysis
+
+### Protocol Violation
+Confidence: 0.0%
+Evidence:
+
+## Recommendations
+
+### PCIe Protocol Violations (Severity: HIGH)
+Actions:
+  - Review TLP formation logic in transmitter
+  - Verify TLP header field values
+  - Check for correct message routing
+  - Validate request/completion pairing
+  - Ensure proper credit management
+  - Review PCIe specification compliance
+
+## RAG-Optimized Error Descriptions
+
+[Time: 2920000ns] PCIe Error Event
+Type: MALFORMED_TLP
+Context: Error occurred in LTSSM state L0
+Impact: 3 recovery cycles detected
+
+[Time: 2925000ns] PCIe Error Event
+Type: MALFORMED_TLP
+Context: Error occurred in LTSSM state L0
+Impact: 3 recovery cycles detected
+
+## AI-Powered Insights
+
+### Q: What is the root cause of these PCIe errors?
+Based on waveform analysis, the primary root cause appears to be protocol violations. 
+The system detected malformed TLP packets which indicates issues with:
+1. TLP header formation logic
+2. Field validation in the transmitter  
+3. Possible firmware bugs in packet generation
+4. Protocol compliance verification gaps
+
+Recommendation: Review the TLP generation code and validate against PCIe specification.
+
+### Q: What are the recommended fixes?
+To fix the detected issues:
+
+1. Immediate Actions:
+   - Review TLP formation logic in transmitter
+   - Validate TLP header field values
+   - Check protocol compliance test coverage
+
+2. Investigation:
+   - Capture and analyze the malformed TLP details
+   - Review recent firmware changes
+   - Run protocol compliance tests
+
+3. Long-term:
+   - Implement stricter TLP validation
+   - Add real-time protocol monitoring
+   - Enhance error reporting mechanisms
+
+### Q: Are these signal integrity issues?
+The VCD analysis shows multiple recovery cycles indicating potential signal integrity issues:
+
+Physical Layer Analysis:
+- 12 recovery events detected (threshold: >5 = HIGH severity)
+- Recovery cycles suggest link instability
+- No direct CRC errors but pattern indicates SI problems
+
+Recommendations:
+- Check PCIe trace impedance and routing
+- Measure eye diagrams at receiver
+- Verify power delivery to PCIe components
+- Check for EMI sources near PCIe lanes

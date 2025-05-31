@@ -29,9 +29,14 @@ COMPILE_ARGS += -Wno-timescale
 include $(shell cocotb-config --makefiles)/Makefile.sim
 
 # Custom targets
-.PHONY: all clean test_crc test_timeout test_comprehensive view_logs
+.PHONY: all clean test_crc test_timeout test_comprehensive view_logs test_vcd
 
 all: test_comprehensive
+
+# VCD generation test
+test_vcd:
+	@echo "Running VCD generation test..."
+	$(MAKE) TESTCASE=test_vcd_generation MODULE=test_simple_vcd WAVES=1
 
 # Individual test targets
 test_crc:

@@ -1,0 +1,65 @@
+
+PCIe VCD Error Analysis Report
+==============================
+Generated: 2025-05-31 11:25:20
+Source: pcie_waveform.vcd
+
+## Executive Summary
+Total Errors Analyzed: 2
+Root Causes Identified: 1
+Critical Issues: 0
+
+## Error Timeline Analysis
+
+### Error 1: MALFORMED_TLP at 2920000ns
+LTSSM State: L0
+Recovery Attempts Before Error: 3
+
+Preceding Events:
+  - [2710000ns] LTSSM State Change
+  - [2910000ns] PCIe Transaction
+  - [2915000ns] PCIe Transaction
+
+### Error 2: MALFORMED_TLP at 2925000ns
+LTSSM State: L0
+Recovery Attempts Before Error: 3
+
+Preceding Events:
+  - [2910000ns] PCIe Transaction
+  - [2915000ns] PCIe Transaction
+  - [2920000ns] PCIe Error
+
+## Timing Analysis
+Average Transaction Latency: 0ns
+Maximum Transaction Latency: 0ns
+Timeout Events: 0
+Average Recovery Duration: 10000ns
+
+## Root Cause Analysis
+
+### Protocol Violation
+Confidence: 0.0%
+Evidence:
+
+## Recommendations
+
+### PCIe Protocol Violations (Severity: HIGH)
+Actions:
+  - Review TLP formation logic in transmitter
+  - Verify TLP header field values
+  - Check for correct message routing
+  - Validate request/completion pairing
+  - Ensure proper credit management
+  - Review PCIe specification compliance
+
+## RAG-Optimized Error Descriptions
+
+[Time: 2920000ns] PCIe Error Event
+Type: MALFORMED_TLP
+Context: Error occurred in LTSSM state L0
+Impact: 3 recovery cycles detected
+
+[Time: 2925000ns] PCIe Error Event
+Type: MALFORMED_TLP
+Context: Error occurred in LTSSM state L0
+Impact: 3 recovery cycles detected

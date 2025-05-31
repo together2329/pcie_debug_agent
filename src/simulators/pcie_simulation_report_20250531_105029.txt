@@ -1,0 +1,55 @@
+PCIe Error Simulation Report
+Generated: 2025-05-31 10:50:29.038205
+======================================================================
+
+Simulation Summary:
+  Duration: 4550ns
+  Transactions: 25
+  Errors: 9
+
+Error Log:
+--------------------------------------------------
+[1540ns] PCIe: ERROR - CRC error detected on TLP
+[1590ns] PCIe: ERROR - Link entering RECOVERY state
+[2460ns] PCIe: ERROR - Completion timeout for Tag=99
+[3460ns] PCIe: ERROR - Device not responding
+[3830ns] PCIe: ERROR - ECRC mismatch in TLP
+[3880ns] PCIe: ERROR - TLP discarded due to ECRC failure
+[4250ns] PCIe: ERROR - Malformed TLP detected
+[4270ns] PCIe: ERROR - Invalid TLP format field
+[4270ns] PCIe: ERROR - TLP dropped, sending UR completion
+
+Total errors detected: 9
+
+Error breakdown:
+  - CRC: 3 occurrences
+  - timeout: 1 occurrences
+  - ECRC: 2 occurrences
+  - Malformed: 1 occurrences
+
+Detailed Analysis:
+
+CRC Errors (3 occurrences):
+  Likely Cause: Signal integrity issues, EMI, or physical layer problems
+  Impact: Corrupted data transmission, link recovery required
+  Recommended Fix: Check signal routing, add shielding, verify termination
+
+timeout Errors (1 occurrences):
+  Likely Cause: Device not responding, completion lost, or deadlock
+  Impact: Transaction failure, potential system hang
+  Recommended Fix: Increase timeout values, check device power state, verify routing
+
+ECRC Errors (2 occurrences):
+  Likely Cause: End-to-end data corruption, memory errors
+  Impact: Data integrity compromise, transaction retry needed
+  Recommended Fix: Enable ECC memory, check data path integrity
+
+Malformed Errors (1 occurrences):
+  Likely Cause: Protocol violation, incorrect TLP formatting
+  Impact: Transaction rejected, UR status returned
+  Recommended Fix: Fix TLP generation logic, verify protocol compliance
+
+Recommendations:
+- Multiple link recovery events. Consider reducing link speed for stability.
+- Timeout errors present. Review completion credit flow and buffer sizes.
+- Error rate >10%. System reliability compromised.

@@ -1,0 +1,99 @@
+{
+  "vcd_ai": {
+    "method": "VCD+AI",
+    "analysis_time": 0.0070552825927734375,
+    "errors_detected": 2,
+    "error_types": [
+      "MALFORMED_TLP",
+      "MALFORMED_TLP"
+    ],
+    "recovery_cycles": 12,
+    "root_causes": [
+      "protocol_violation"
+    ],
+    "recommendations": 1,
+    "timing_analysis": true,
+    "precision_score": 0,
+    "recall_score": 0,
+    "details": {
+      "can_identify_exact_error_times": true,
+      "can_correlate_with_signals": true,
+      "can_analyze_timing": true,
+      "can_detect_patterns": true,
+      "provides_evidence": true
+    },
+    "query_results": {
+      "What type of errors occurred?": "Based on the VCD analysis, I can help with:\n- Error root cause analysis\n- Signal integrity assessment  \n- Timing analysis\n- Protocol compliance issues\n- Debugging recommendations\n\nYour question: \"What type of errors occurred?\"\n\nThe waveform shows 1 error events and provides detailed timing information for analysis.",
+      "How many recovery cycles happened?": "Based on the VCD analysis, I can help with:\n- Error root cause analysis\n- Signal integrity assessment  \n- Timing analysis\n- Protocol compliance issues\n- Debugging recommendations\n\nYour question: \"How many recovery cycles happened?\"\n\nThe waveform shows 1 error events and provides detailed timing information for analysis.",
+      "What is the root cause?": "Based on waveform analysis, the primary root cause appears to be protocol violations. \nThe system detected malformed TLP packets which indicates issues with:\n1. TLP header formation logic\n2. Field validation in the transmitter  \n3. Possible firmware bugs in packet generation\n4. Protocol compliance verification gaps\n\nRecommendation: Review the TLP generation code and validate against PCIe specification.",
+      "Are there timing issues?": "Timing analysis from waveform data:\n\nTransaction Timing:\n- Most transactions complete normally\n- No significant latency issues detected\n- No completion timeouts in analyzed window\n\nState Machine Timing:\n- LTSSM transitions occur at normal intervals\n- Recovery cycles complete within spec\n- Link training timing appears normal\n\nThe timing itself is not the primary issue - focus on protocol compliance."
+    },
+    "error_precision": 1.0,
+    "error_recall": 1.0,
+    "recovery_accuracy": 1.0,
+    "root_cause_accuracy": 1.0,
+    "overall_accuracy": 1.0
+  },
+  "ai_only": {
+    "method": "AI-Only",
+    "analysis_time": 9.5367431640625e-07,
+    "errors_detected": 3,
+    "error_types": [
+      "MALFORMED_TLP"
+    ],
+    "recovery_cycles": 1,
+    "root_causes": [
+      "malformed_tlp"
+    ],
+    "recommendations": 1,
+    "timing_analysis": false,
+    "precision_score": 0,
+    "recall_score": 0,
+    "details": {
+      "can_identify_exact_error_times": false,
+      "can_correlate_with_signals": false,
+      "can_analyze_timing": false,
+      "can_detect_patterns": false,
+      "provides_evidence": false
+    },
+    "query_results": {
+      "What type of errors occurred?": "Based on logs: Malformed TLP errors detected. Limited visibility into full error picture.",
+      "How many recovery cycles happened?": "Based on logs: At least 1 recovery cycle observed. Actual count unknown without waveform data.",
+      "What is the root cause?": "Based on logs: Likely TLP formation issue. Cannot verify without signal-level analysis.",
+      "Are there timing issues?": "Cannot analyze timing without waveform data. Logs only show event occurrence."
+    },
+    "error_precision": 1.0,
+    "error_recall": 1.5,
+    "recovery_accuracy": 0.08333333333333337,
+    "root_cause_accuracy": 0.0,
+    "overall_accuracy": 0.6458333333333334
+  },
+  "manual": {
+    "method": "Manual",
+    "analysis_time": 1.0050382614135742,
+    "errors_detected": 2,
+    "error_types": [
+      "MALFORMED_TLP"
+    ],
+    "recovery_cycles": 12,
+    "root_causes": [
+      "unknown"
+    ],
+    "recommendations": 0,
+    "timing_analysis": true,
+    "precision_score": 0,
+    "recall_score": 0,
+    "details": {
+      "can_identify_exact_error_times": true,
+      "can_correlate_with_signals": true,
+      "can_analyze_timing": true,
+      "can_detect_patterns": false,
+      "provides_evidence": false
+    },
+    "error_precision": 1.0,
+    "error_recall": 1.0,
+    "recovery_accuracy": 1.0,
+    "root_cause_accuracy": 0.0,
+    "overall_accuracy": 0.75
+  }
+}
