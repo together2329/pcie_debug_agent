@@ -1,0 +1,144 @@
+{
+  "test_timestamp": "20250531_114440",
+  "ground_truth": {
+    "actual_errors": {
+      "malformed_tlp": 2,
+      "crc_errors": 0,
+      "timeout_errors": 0,
+      "ecrc_errors": 0
+    },
+    "actual_recovery_cycles": 12,
+    "actual_transactions": 16,
+    "actual_ltssm_changes": 28,
+    "primary_root_cause": "protocol_violation",
+    "secondary_issues": [
+      "signal_integrity"
+    ],
+    "timing_issues": false,
+    "critical_times": [
+      2920000,
+      2925000
+    ],
+    "link_stability": false
+  },
+  "methods": {
+    "vcd_ai": {
+      "results": {
+        "method": "VCD+AI",
+        "analysis_time": 0.0073430538177490234,
+        "errors_detected": 2,
+        "error_types": [
+          "MALFORMED_TLP",
+          "MALFORMED_TLP"
+        ],
+        "recovery_cycles": 12,
+        "root_causes": [
+          "protocol_violation"
+        ],
+        "recommendations": 1,
+        "timing_analysis": true,
+        "confidence_scores": {
+          "error_detection": 1.0,
+          "recovery_detection": 1.0,
+          "root_cause_identification": 1.0,
+          "timing_analysis": 1.0,
+          "overall": 1.0
+        },
+        "details": {
+          "exact_error_times": true,
+          "signal_correlation": true,
+          "pattern_detection": true,
+          "evidence_provision": true
+        }
+      },
+      "metrics": {
+        "error_precision": 1.0,
+        "error_recall": 1.0,
+        "recovery_accuracy": 1.0,
+        "root_cause_accuracy": 0.5,
+        "timing_accuracy": 1.0,
+        "overall_accuracy": 0.9249999999999999
+      }
+    },
+    "enhanced_ai": {
+      "results": {
+        "method": "Enhanced AI-Only",
+        "analysis_time": 0.00025773048400878906,
+        "errors_detected": 4,
+        "error_types": [
+          "repeated_malformed_tlp"
+        ],
+        "recovery_cycles": 36,
+        "root_causes": [
+          "protocol_violation",
+          "signal_integrity",
+          "systematic_instability"
+        ],
+        "recommendations": 4,
+        "timing_analysis": true,
+        "confidence_scores": {
+          "error_detection": 0.8,
+          "error_classification": 0.7,
+          "recovery_detection": 0.3,
+          "root_cause_identification": 0.6,
+          "timing_analysis": 0.2,
+          "overall": 0.52
+        },
+        "details": {
+          "exact_error_times": false,
+          "signal_correlation": false,
+          "pattern_detection": true,
+          "evidence_provision": true
+        }
+      },
+      "metrics": {
+        "error_precision": 0.5,
+        "error_recall": 1.0,
+        "recovery_accuracy": 1.0,
+        "root_cause_accuracy": 1.0,
+        "timing_accuracy": 1.0,
+        "overall_accuracy": 0.875
+      }
+    },
+    "original_ai": {
+      "results": {
+        "method": "Original AI-Only",
+        "analysis_time": 0.0,
+        "errors_detected": 3,
+        "error_types": [
+          "MALFORMED_TLP"
+        ],
+        "recovery_cycles": 1,
+        "root_causes": [],
+        "recommendations": 1,
+        "timing_analysis": false,
+        "confidence_scores": {
+          "error_detection": 0.6,
+          "recovery_detection": 0.08,
+          "root_cause_identification": 0.0,
+          "timing_analysis": 0.0,
+          "overall": 0.17
+        },
+        "details": {
+          "exact_error_times": false,
+          "signal_correlation": false,
+          "pattern_detection": false,
+          "evidence_provision": false
+        }
+      },
+      "metrics": {
+        "error_precision": 0.6666666666666666,
+        "error_recall": 1.0,
+        "recovery_accuracy": 0.08333333333333333,
+        "root_cause_accuracy": 0.0,
+        "timing_accuracy": 0.0,
+        "overall_accuracy": 0.43749999999999994
+      }
+    }
+  },
+  "summary": {
+    "best_method": "VCD+AI",
+    "enhanced_improvement": 2.0000000000000004,
+    "vcd_advantage": 1.0571428571428572
+  }
+}

@@ -69,4 +69,15 @@ temp_*/
 models/
 *.gguf
 *.bin
-*.safetensors 
+*.safetensors
+
+# Ollama models and cache
+~/.ollama/
+.ollama/
+
+# DeepSeek and other large models
+*deepseek*
+*llama*
+*mistral*
+*gemma*
+*qwen* 
