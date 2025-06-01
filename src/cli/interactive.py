@@ -19,6 +19,7 @@ from src.vectorstore.faiss_store import FAISSVectorStore
 from src.rag.enhanced_rag_engine import EnhancedRAGEngine
 from src.config.settings import load_settings
 from src.cli.utils.output import print_success, print_error, print_info, print_warning
+from src.cli.utils.token_counter import TokenCounter
 from src.cli.memory import MemoryManager
 from src.cli.session_manager import SessionManager
 
@@ -52,6 +53,7 @@ Type your PCIe questions directly or use slash commands.
         
         self.memory_manager = MemoryManager()
         self.session_manager = SessionManager()
+        self.token_counter = TokenCounter()
         
         # RAG components
         self.vector_store = None
@@ -60,6 +62,7 @@ Type your PCIe questions directly or use slash commands.
         # Session state
         self.current_session = None
         self.conversation_history = []
+        self.session_tokens = {"input": 0, "output": 0}  # Track tokens per session
         
         # Initialize system
         self._initialize_system()
@@ -149,6 +152,7 @@ Available Commands:
   /session             Manage conversation sessions
   /clear               Clear current conversation
   /status              Show system status
+  /tokens              Show detailed token usage
   /review              Request code review
   /search <query>      Search knowledge base
   /analyze <log>       Analyze PCIe log file
@@ -281,6 +285,7 @@ Examples:
         """Clear conversation history"""
         self.conversation_history.clear()
         self.turn_count = 0
+        self.session_tokens = {"input": 0, "output": 0}
         print_success("✅ Conversation cleared")
     
     def do_status(self, arg):
@@ -311,6 +316,11 @@ Examples:
    Session ID: {self.current_session or 'None'}
    Conversation History: {len(self.conversation_history)} messages
    Memory Entries: {len(self.memory_manager.get_memory())}
+   
+🎯 Token Usage (This Session):
+   Input Tokens: {self.token_counter.format_token_count(self.session_tokens['input'])}
+   Output Tokens: {self.token_counter.format_token_count(self.session_tokens['output'])}
+   Total Tokens: {self.token_counter.format_token_count(self.session_tokens['input'] + self.session_tokens['output'])}
    
 ⚙️  Settings:
    Verbose Analysis: {verbose_status}
@@ -527,6 +537,43 @@ Please provide a comprehensive analysis."""
         else:
             print_error("❌ Invalid option. Use: /rag on|off")
     
+    def do_tokens(self, arg):
+        """Show detailed token usage information"""
+        model_name = self.model_selector.get_current_model()
+        limits = self.token_counter.get_model_limits(model_name)
+        
+        print(f"""
+📊 Token Usage Analysis
+{'='*60}
+
+🎯 Current Session:
+   Input Tokens:  {self.token_counter.format_token_count(self.session_tokens['input'])}
+   Output Tokens: {self.token_counter.format_token_count(self.session_tokens['output'])}
+   Total Tokens:  {self.token_counter.format_token_count(self.session_tokens['input'] + self.session_tokens['output'])}
+
+📏 Model Limits ({model_name}):
+   Context Window: {limits['context']:,} tokens
+   Max Output:     {limits['max_output']:,} tokens
+
+📈 Usage Percentage:
+   Context Usage: {(self.session_tokens['input'] + self.session_tokens['output']) / limits['context'] * 100:.1f}%
+   Output Usage:  {self.session_tokens['output'] / limits['max_output'] * 100:.1f}%
+
+💡 Token Estimation Guide:
+   • 1 token ≈ 4 characters (English)
+   • 1 token ≈ 0.75 words
+   • 100 tokens ≈ 75 words ≈ 3-4 sentences
+   • 1,000 tokens ≈ 750 words ≈ 1.5 pages
+   • 10,000 tokens ≈ 7,500 words ≈ 15 pages
+
+💰 Cost Estimation (OpenAI pricing):
+   • GPT-4o-mini: $0.075 per 1M input, $0.300 per 1M output
+   • GPT-4o: $2.50 per 1M input, $10.00 per 1M output
+   • GPT-4: $10.00 per 1M input, $30.00 per 1M output
+
+{'='*60}
+        """)
+    
     def do_verbose(self, arg):
         """Toggle verbose analysis mode"""
         if not arg:
@@ -611,6 +658,9 @@ Please provide a comprehensive analysis."""
             search_time = 0
             llm_time = 0
             
+            input_tokens = 0
+            output_tokens = 0
+            
             if self.rag_enabled and self.rag_engine:
                 # Use RAG pipeline
                 if self.analysis_verbose:
@@ -661,6 +711,12 @@ Please provide a comprehensive analysis."""
                     response = result.answer
                     sources = getattr(result, 'sources', [])
                     confidence = getattr(result, 'confidence', None)
+                    
+                    # Estimate tokens for RAG (prompt includes context)
+                    context_text = "\n".join([s.get('content', '')[:500] for s in sources[:5]])
+                    full_prompt = f"{query}\n\nContext:\n{context_text}"
+                    input_tokens = self.token_counter.count_tokens(full_prompt, model_name)
+                    output_tokens = self.token_counter.count_tokens(response, model_name)
                 else:
                     response = "No response generated"
                     sources = []
@@ -689,11 +745,23 @@ Please structure your response with:
 
 Be concise but thorough in your technical analysis."""
                 
+                # Count input tokens
+                input_tokens = self.token_counter.count_tokens(prompt, model_name)
+                
+                if self.analysis_verbose:
+                    llm_start = time.time()
+                
                 response = self.model_wrapper.generate_completion(prompt)
                 sources = []
                 confidence = None
                 
                 end_time = time.time()
+                
+                if self.analysis_verbose:
+                    llm_time = end_time - llm_start
+                
+                # Count output tokens
+                output_tokens = self.token_counter.count_tokens(response, model_name)
             
             if response and response != "No response generated":
                 print("\n💡 Response:")
@@ -755,6 +823,24 @@ Be concise but thorough in your technical analysis."""
                         print(f"     • No vector database search performed")
                         print(f"     • Query sent directly to {model_name}")
                         print(f"     • Processing time: {end_time - start_time:.3f}s")
+                    
+                    # Always show token counts in verbose mode
+                    print(f"\n📊 Token Usage:")
+                    print(f"   • Input tokens: {self.token_counter.format_token_count(input_tokens)}")
+                    print(f"   • Output tokens: {self.token_counter.format_token_count(output_tokens)}")
+                    print(f"   • Total tokens: {self.token_counter.format_token_count(input_tokens + output_tokens)}")
+                    
+                    # Check token limits
+                    token_usage = self.token_counter.check_token_usage(input_tokens, output_tokens, model_name)
+                    if token_usage['within_limits']:
+                        print(f"   • Context usage: {token_usage['context_usage_pct']:.1f}% of {token_usage['context_limit']:,} limit")
+                        print(f"   • Output usage: {token_usage['output_usage_pct']:.1f}% of {token_usage['output_limit']:,} limit")
+                    else:
+                        print(f"   ⚠️  Token limits exceeded!")
+                        if token_usage['total_tokens'] > token_usage['context_limit']:
+                            print(f"      Context limit exceeded: {token_usage['total_tokens']:,} > {token_usage['context_limit']:,}")
+                        if token_usage['output_tokens'] > token_usage['output_limit']:
+                            print(f"      Output limit exceeded: {token_usage['output_tokens']:,} > {token_usage['output_limit']:,}")
                 elif self.verbose:
                     print(f"\n⏱️ Response time: {end_time - start_time:.1f}s")
                     if self.rag_enabled and 'result' in locals() and hasattr(result, 'sources'):
@@ -765,6 +851,10 @@ Be concise but thorough in your technical analysis."""
                 # Add to conversation history
                 self._add_to_history("user", query)
                 self._add_to_history("assistant", response)
+                
+                # Update session token counts
+                self.session_tokens["input"] += input_tokens
+                self.session_tokens["output"] += output_tokens
                 
             else:
                 print_error("❌ No response generated")
