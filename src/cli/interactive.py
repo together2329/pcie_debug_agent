@@ -67,6 +67,7 @@ Type your PCIe questions directly or use slash commands.
         self.current_session = None
         self.conversation_history = []
         self.session_tokens = {"input": 0, "output": 0}  # Track tokens per session
+        self.session_start_time = time.time()  # Track session duration
         
         # Streaming configuration
         self.streaming_enabled = True  # Enable streaming by default
@@ -334,11 +335,12 @@ Examples:
                 print_error(f"❌ Session not found: {session_id}")
     
     def do_clear(self, arg):
-        """Clear conversation history"""
+        """Clear conversation history and free up context"""
         self.conversation_history.clear()
         self.turn_count = 0
         self.session_tokens = {"input": 0, "output": 0}
-        print_success("✅ Conversation cleared")
+        self.session_start_time = time.time()  # Reset session timer
+        print_success("✅ Conversation cleared and session timer reset")
     
     def do_status(self, arg):
         """Show system status"""
@@ -1235,6 +1237,370 @@ Be concise but thorough in your technical analysis."""
         
         return mock_result
     
+    def _show_command_suggestions(self):
+        """Show available commands in a nice formatted display"""
+        commands = self._get_available_commands()
+        
+        print("\n" + "╭" + "─" * 168 + "╮")
+        print("│ > /                                                                                                                                                                        │")
+        print("╰" + "─" * 168 + "╯")
+        
+        for cmd_name, description in commands:
+            print(f"  /{cmd_name:<15} {description}")
+        
+        print()
+    
+    def _get_available_commands(self):
+        """Get list of available commands with descriptions"""
+        commands = []
+        
+        # Get all methods that start with 'do_'
+        for attr_name in dir(self):
+            if attr_name.startswith('do_') and not attr_name.startswith('do_EOF'):
+                cmd_name = attr_name[3:]  # Remove 'do_' prefix
+                method = getattr(self, attr_name)
+                
+                # Get docstring as description
+                if hasattr(method, '__doc__') and method.__doc__:
+                    description = method.__doc__.strip()
+                else:
+                    description = f"Execute {cmd_name} command"
+                
+                commands.append((cmd_name, description))
+        
+        # Sort commands alphabetically
+        commands.sort(key=lambda x: x[0])
+        
+        return commands
+    
+    def _find_matching_commands(self, partial_cmd):
+        """Find commands that start with the partial command"""
+        available_commands = self._get_available_commands()
+        matches = []
+        
+        for cmd_name, _ in available_commands:
+            if cmd_name.startswith(partial_cmd.lower()):
+                matches.append(cmd_name)
+        
+        return matches
+    
+    def do_cost(self, arg):
+        """Show the total cost and duration of the current session"""
+        session_duration = time.time() - self.session_start_time
+        hours = int(session_duration // 3600)
+        minutes = int((session_duration % 3600) // 60)
+        seconds = int(session_duration % 60)
+        
+        # Format duration
+        if hours > 0:
+            duration_str = f"{hours}h {minutes}m {seconds}s"
+        elif minutes > 0:
+            duration_str = f"{minutes}m {seconds}s"
+        else:
+            duration_str = f"{seconds}s"
+        
+        current_model = self.model_selector.get_current_model()
+        input_tokens = self.session_tokens["input"]
+        output_tokens = self.session_tokens["output"]
+        total_tokens = input_tokens + output_tokens
+        
+        # Cost calculation (OpenAI pricing as example)
+        cost_info = self._calculate_session_cost(current_model, input_tokens, output_tokens)
+        
+        print(f"""
+💰 Session Cost & Duration Analysis
+{'='*60}
+
+⏱️  Session Duration: {duration_str}
+🕐 Started: {datetime.fromtimestamp(self.session_start_time).strftime('%Y-%m-%d %H:%M:%S')}
+
+🤖 Model: {current_model}
+📊 Token Usage:
+   Input:  {self.token_counter.format_token_count(input_tokens)}
+   Output: {self.token_counter.format_token_count(output_tokens)}
+   Total:  {self.token_counter.format_token_count(total_tokens)}
+
+💵 Estimated Cost:
+   Input:  ${cost_info['input_cost']:.6f}
+   Output: ${cost_info['output_cost']:.6f}
+   Total:  ${cost_info['total_cost']:.6f}
+
+📈 Session Stats:
+   Conversations: {len(self.conversation_history) // 2} interactions
+   Turns Used: {self.turn_count}/{self.max_turns}
+   RAG Mode: {self.rag_search_mode.upper()}
+   Streaming: {'ON' if self.streaming_enabled else 'OFF'}
+
+💡 Cost Breakdown:
+   • {cost_info['provider']} pricing
+   • Input: ${cost_info['input_rate']:.3f}/1K tokens
+   • Output: ${cost_info['output_rate']:.3f}/1K tokens
+   
+{'='*60}
+        """)
+    
+    def _calculate_session_cost(self, model_name, input_tokens, output_tokens):
+        """Calculate estimated cost for the session"""
+        # Cost per 1K tokens (USD)
+        pricing = {
+            "gpt-4o-mini": {
+                "provider": "OpenAI",
+                "input_rate": 0.000075,  # $0.075/1M tokens
+                "output_rate": 0.0003   # $0.300/1M tokens
+            },
+            "gpt-4o": {
+                "provider": "OpenAI", 
+                "input_rate": 0.0025,   # $2.50/1M tokens
+                "output_rate": 0.01     # $10.00/1M tokens
+            },
+            "gpt-4": {
+                "provider": "OpenAI",
+                "input_rate": 0.01,     # $10.00/1M tokens
+                "output_rate": 0.03     # $30.00/1M tokens
+            },
+            "claude-3-opus": {
+                "provider": "Anthropic",
+                "input_rate": 0.015,    # $15.00/1M tokens
+                "output_rate": 0.075    # $75.00/1M tokens
+            }
+        }
+        
+        # Default for local/free models
+        default_pricing = {
+            "provider": "Local/Free",
+            "input_rate": 0.0,
+            "output_rate": 0.0
+        }
+        
+        model_pricing = pricing.get(model_name, default_pricing)
+        
+        # Calculate costs (rates are per 1K tokens)
+        input_cost = (input_tokens / 1000) * model_pricing["input_rate"]
+        output_cost = (output_tokens / 1000) * model_pricing["output_rate"]
+        total_cost = input_cost + output_cost
+        
+        return {
+            "provider": model_pricing["provider"],
+            "input_rate": model_pricing["input_rate"],
+            "output_rate": model_pricing["output_rate"],
+            "input_cost": input_cost,
+            "output_cost": output_cost,
+            "total_cost": total_cost
+        }
+    
+    def do_doctor(self, arg):
+        """Checks the health of your PCIe Debug Agent installation"""
+        print("\n🏥 PCIe Debug Agent Health Check")
+        print("=" * 60)
+        
+        health_status = {"total": 0, "passed": 0, "warnings": 0, "errors": 0}
+        
+        # Check Python environment
+        print("\n📦 Python Environment:")
+        self._check_python_version(health_status)
+        self._check_dependencies(health_status)
+        
+        # Check core components
+        print("\n🔧 Core Components:")
+        self._check_model_providers(health_status)
+        self._check_embedding_providers(health_status)
+        
+        # Check RAG system
+        print("\n📚 RAG System:")
+        self._check_vector_database(health_status)
+        self._check_knowledge_base(health_status)
+        
+        # Check file system
+        print("\n📁 File System:")
+        self._check_directories(health_status)
+        self._check_permissions(health_status)
+        
+        # Check memory and performance
+        print("\n⚡ Performance:")
+        self._check_memory_usage(health_status)
+        self._check_disk_space(health_status)
+        
+        # Summary
+        print(f"\n📊 Health Check Summary:")
+        print(f"   Total Checks: {health_status['total']}")
+        print(f"   ✅ Passed: {health_status['passed']}")
+        print(f"   ⚠️  Warnings: {health_status['warnings']}")
+        print(f"   ❌ Errors: {health_status['errors']}")
+        
+        overall_health = "HEALTHY" if health_status['errors'] == 0 else "NEEDS ATTENTION"
+        status_emoji = "✅" if health_status['errors'] == 0 else "⚠️"
+        
+        print(f"\n{status_emoji} Overall Status: {overall_health}")
+        print("=" * 60)
+    
+    def _check_python_version(self, health_status):
+        """Check Python version compatibility"""
+        health_status['total'] += 1
+        try:
+            import sys
+            version = sys.version_info
+            if version >= (3, 8):
+                print(f"   ✅ Python {version.major}.{version.minor}.{version.micro} (supported)")
+                health_status['passed'] += 1
+            else:
+                print(f"   ❌ Python {version.major}.{version.minor}.{version.micro} (requires 3.8+)")
+                health_status['errors'] += 1
+        except Exception as e:
+            print(f"   ❌ Could not check Python version: {e}")
+            health_status['errors'] += 1
+    
+    def _check_dependencies(self, health_status):
+        """Check critical dependencies"""
+        critical_deps = [
+            ('numpy', 'numpy'),
+            ('torch', 'torch'),
+            ('sentence_transformers', 'sentence-transformers'),
+            ('faiss', 'faiss-cpu'),
+            ('rank_bm25', 'rank-bm25')
+        ]
+        
+        for module_name, package_name in critical_deps:
+            health_status['total'] += 1
+            try:
+                __import__(module_name)
+                print(f"   ✅ {package_name}")
+                health_status['passed'] += 1
+            except ImportError:
+                print(f"   ❌ {package_name} (not installed)")
+                health_status['errors'] += 1
+    
+    def _check_model_providers(self, health_status):
+        """Check model provider availability"""
+        health_status['total'] += 1
+        try:
+            current_model = self.model_selector.get_current_model()
+            print(f"   ✅ Current model: {current_model}")
+            health_status['passed'] += 1
+        except Exception as e:
+            print(f"   ❌ Model selector error: {e}")
+            health_status['errors'] += 1
+    
+    def _check_embedding_providers(self, health_status):
+        """Check embedding provider availability"""
+        health_status['total'] += 1
+        try:
+            current_embedding = self.embedding_selector.get_current_model()
+            embedding_info = self.embedding_selector.get_model_info()
+            print(f"   ✅ Embedding model: {current_embedding} ({embedding_info.get('provider', 'unknown')})")
+            health_status['passed'] += 1
+        except Exception as e:
+            print(f"   ❌ Embedding selector error: {e}")
+            health_status['errors'] += 1
+    
+    def _check_vector_database(self, health_status):
+        """Check vector database status"""
+        health_status['total'] += 1
+        if self.vector_store:
+            doc_count = self.vector_store.index.ntotal
+            print(f"   ✅ Vector database loaded ({doc_count:,} documents)")
+            health_status['passed'] += 1
+        else:
+            print(f"   ⚠️  Vector database not loaded (RAG disabled)")
+            health_status['warnings'] += 1
+    
+    def _check_knowledge_base(self, health_status):
+        """Check knowledge base files"""
+        health_status['total'] += 1
+        try:
+            from pathlib import Path
+            kb_path = Path("data/knowledge_base")
+            if kb_path.exists():
+                files = list(kb_path.glob("*.md"))
+                print(f"   ✅ Knowledge base ({len(files)} files)")
+                health_status['passed'] += 1
+            else:
+                print(f"   ⚠️  Knowledge base directory not found")
+                health_status['warnings'] += 1
+        except Exception as e:
+            print(f"   ❌ Knowledge base check failed: {e}")
+            health_status['errors'] += 1
+    
+    def _check_directories(self, health_status):
+        """Check required directories"""
+        required_dirs = ["data", "logs", "models"]
+        
+        for dir_name in required_dirs:
+            health_status['total'] += 1
+            try:
+                from pathlib import Path
+                dir_path = Path(dir_name)
+                if dir_path.exists():
+                    print(f"   ✅ {dir_name}/ directory")
+                    health_status['passed'] += 1
+                else:
+                    print(f"   ⚠️  {dir_name}/ directory missing")
+                    health_status['warnings'] += 1
+            except Exception as e:
+                print(f"   ❌ Could not check {dir_name}/ directory: {e}")
+                health_status['errors'] += 1
+    
+    def _check_permissions(self, health_status):
+        """Check file permissions"""
+        health_status['total'] += 1
+        try:
+            from pathlib import Path
+            import tempfile
+            
+            # Test write permissions
+            test_file = Path("data") / ".health_check_test"
+            test_file.touch()
+            test_file.unlink()
+            print(f"   ✅ File permissions (read/write)")
+            health_status['passed'] += 1
+        except Exception as e:
+            print(f"   ❌ File permission error: {e}")
+            health_status['errors'] += 1
+    
+    def _check_memory_usage(self, health_status):
+        """Check memory usage"""
+        health_status['total'] += 1
+        try:
+            import psutil
+            memory = psutil.virtual_memory()
+            used_gb = memory.used / (1024**3)
+            total_gb = memory.total / (1024**3)
+            percent = memory.percent
+            
+            if percent < 80:
+                print(f"   ✅ Memory usage: {used_gb:.1f}GB/{total_gb:.1f}GB ({percent:.1f}%)")
+                health_status['passed'] += 1
+            else:
+                print(f"   ⚠️  High memory usage: {used_gb:.1f}GB/{total_gb:.1f}GB ({percent:.1f}%)")
+                health_status['warnings'] += 1
+        except ImportError:
+            print(f"   ⚠️  Memory check unavailable (psutil not installed)")
+            health_status['warnings'] += 1
+        except Exception as e:
+            print(f"   ❌ Memory check failed: {e}")
+            health_status['errors'] += 1
+    
+    def _check_disk_space(self, health_status):
+        """Check available disk space"""
+        health_status['total'] += 1
+        try:
+            import shutil
+            from pathlib import Path
+            
+            total, used, free = shutil.disk_usage(Path.cwd())
+            free_gb = free / (1024**3)
+            total_gb = total / (1024**3)
+            percent_free = (free / total) * 100
+            
+            if percent_free > 10:  # More than 10% free
+                print(f"   ✅ Disk space: {free_gb:.1f}GB free ({percent_free:.1f}%)")
+                health_status['passed'] += 1
+            else:
+                print(f"   ⚠️  Low disk space: {free_gb:.1f}GB free ({percent_free:.1f}%)")
+                health_status['warnings'] += 1
+        except Exception as e:
+            print(f"   ❌ Disk space check failed: {e}")
+            health_status['errors'] += 1
+    
     def do_tokens(self, arg):
         """Show detailed token usage information"""
         model_name = self.model_selector.get_current_model()
@@ -1346,18 +1712,31 @@ Be concise but thorough in your technical analysis."""
         
         # Handle slash commands
         if line.startswith('/'):
+            # Show command suggestions if just "/" is typed
+            if line.strip() == '/':
+                self._show_command_suggestions()
+                return
+            
             # Convert slash command to method call
             parts = line[1:].split(None, 1)
             cmd = parts[0]
             arg = parts[1] if len(parts) > 1 else ''
             
-            # Map common slash commands to methods
-            if hasattr(self, f'do_{cmd}'):
-                return getattr(self, f'do_{cmd}')(arg)
-            else:
-                print(f"❌ Unknown command: /{cmd}")
-                print("   Type /help for available commands")
+            # Show partial command matches if command not found
+            if not hasattr(self, f'do_{cmd}'):
+                matching_commands = self._find_matching_commands(cmd)
+                if matching_commands:
+                    print(f"❌ Unknown command: /{cmd}")
+                    print("📝 Did you mean:")
+                    for match in matching_commands[:5]:  # Show top 5 matches
+                        print(f"   /{match}")
+                else:
+                    print(f"❌ Unknown command: /{cmd}")
+                    print("   Type / for available commands or /help for detailed help")
                 return
+            
+            # Execute the command
+            return getattr(self, f'do_{cmd}')(arg)
         
         # Check turn limit
         if self.turn_count >= self.max_turns:
