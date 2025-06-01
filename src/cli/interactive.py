@@ -134,6 +134,15 @@ Type your PCIe questions directly or use slash commands.
                 if not self.rag_enabled:
                     print("   (Running in direct mode without RAG)")
                 
+                # Show current embedding model
+                current_embedding = self.embedding_selector.get_current_model()
+                embedding_info = self.embedding_selector.get_model_info()
+                print(f"   Embedding model: {current_embedding}")
+                print(f"   Provider: {embedding_info.get('provider', 'unknown')}")
+                print(f"   Dimension: {embedding_info.get('dimension', 'unknown')}")
+                if embedding_info.get('cost') != 'free':
+                    print(f"   Cost: {embedding_info.get('cost', 'unknown')}")
+                
         except Exception as e:
             print_error(f"Failed to initialize system: {e}")
             if self.verbose:
@@ -170,6 +179,7 @@ Direct Usage:
 Examples:
   > Why is PCIe link training failing?
   > /model llama-3.2-3b
+  > /rag_model text-embedding-3-small
   > /analyze logs/pcie_error.log
   > /search completion timeout
   > /verbose on
@@ -550,16 +560,32 @@ Please provide a comprehensive analysis."""
             print("\n🧮 Available Embedding Models:")
             print("-" * 70)
             
-            for model_id, config in models.items():
-                marker = "✓" if model_id == current else " "
-                available = "✅" if self.embedding_selector.is_available(model_id) else "❌"
-                provider_type = "API" if config["cost"] != "free" else "Local"
-                
-                print(f"  {marker} {model_id:<25} {available} - {config['description']}")
-                print(f"    {' '*27} {provider_type} | {config['speed']} | {config['cost']}")
+            # Show models in preferred order
+            preferred_order = [
+                "text-embedding-3-small",
+                "text-embedding-3-large", 
+                "text-embedding-ada-002",
+                "all-MiniLM-L6-v2",
+                "all-mpnet-base-v2",
+                "multi-qa-MiniLM-L6-cos-v1"
+            ]
+            
+            for model_id in preferred_order:
+                if model_id in models:
+                    config = models[model_id]
+                    marker = "✓" if model_id == current else " "
+                    available = "✅" if self.embedding_selector.is_available(model_id) else "❌"
+                    provider_type = "API" if config["cost"] != "free" else "Local"
+                    
+                    # Mark preferred default
+                    default_marker = " [DEFAULT]" if model_id == "text-embedding-3-small" else ""
+                    
+                    print(f"  {marker} {model_id:<25} {available} - {config['description']}{default_marker}")
+                    print(f"    {' '*27} {provider_type} | {config['speed']} | {config['cost']}")
             
             print(f"\nCurrent: {current}")
             print("Use '/rag_model <name>' to switch")
+            print("\nℹ️  text-embedding-3-small is the default when OpenAI API key is available")
             return
         
         # Switch embedding model

@@ -208,14 +208,32 @@ class EmbeddingSelector:
             if self.settings_file.exists():
                 with open(self.settings_file, 'r') as f:
                     settings = json.load(f)
-                    model_id = settings.get("current_model", "all-MiniLM-L6-v2")
+                    model_id = settings.get("current_model", self._get_default_model())
             else:
-                model_id = "all-MiniLM-L6-v2"  # Default
+                model_id = self._get_default_model()
             
             self.switch_model(model_id)
         except Exception:
             # Fallback to default
-            self.switch_model("all-MiniLM-L6-v2")
+            self.switch_model(self._get_default_model())
+    
+    def _get_default_model(self) -> str:
+        """Get the default embedding model with fallback logic"""
+        # Try OpenAI text-embedding-3-small first if API key available
+        api_key = os.getenv("OPENAI_API_KEY")
+        if api_key and api_key.strip():
+            try:
+                # Test if we can create the provider
+                provider = OpenAIEmbeddingProvider("text-embedding-3-small")
+                # Try a simple test to ensure the API key works
+                test_result = provider.get_info()
+                if test_result.get("api_key_set", False):
+                    return "text-embedding-3-small"
+            except Exception:
+                pass  # Fall back to local model
+        
+        # Fallback to local model
+        return "all-MiniLM-L6-v2"
     
     def _save_settings(self):
         """Save embedding model settings to file"""
