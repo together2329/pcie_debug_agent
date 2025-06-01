@@ -24,6 +24,7 @@ class DocumentChunker:
         """Initialize document chunker"""
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
+        self.min_chunk_size = 50  # Minimum words per chunk
         self.logger = logging.getLogger(__name__)
     
     def chunk_documents(self, file_path: Path) -> List[DocumentChunk]:
@@ -159,6 +160,46 @@ class DocumentChunker:
                 chunk_id=f"{metadata['file_name']}_{len(chunks)}"
             )
             chunks.append(chunk)
+        
+        return chunks
+    
+    def chunk_text(self, text: str) -> List[str]:
+        """Simple text chunking method for string input"""
+        if not text:
+            return []
+        
+        # Split text into sentences
+        sentences = re.split(r'(?<=[.!?])\s+', text)
+        
+        chunks = []
+        current_chunk = []
+        current_length = 0
+        
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+            
+            sentence_length = len(sentence.split())
+            
+            # If adding this sentence would exceed chunk size, create a new chunk
+            if current_length + sentence_length > self.chunk_size and current_chunk:
+                chunks.append(' '.join(current_chunk))
+                
+                # Keep overlap
+                if self.chunk_overlap > 0 and len(current_chunk) > self.chunk_overlap:
+                    current_chunk = current_chunk[-self.chunk_overlap:]
+                    current_length = sum(len(s.split()) for s in current_chunk)
+                else:
+                    current_chunk = []
+                    current_length = 0
+            
+            current_chunk.append(sentence)
+            current_length += sentence_length
+        
+        # Add the last chunk if there's any content left
+        if current_chunk:
+            chunks.append(' '.join(current_chunk))
         
         return chunks
 

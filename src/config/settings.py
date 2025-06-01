@@ -24,7 +24,7 @@ class LocalLLMConfig:
     n_gpu_layers: int = -1
     verbose: bool = False
     auto_download: bool = True
-    preferred_model: str = "llama-3.2-3b-instruct"
+    preferred_model: str = "llama-3.2-3b"
 
 @dataclass
 class LLMConfig:
@@ -241,18 +241,24 @@ class Settings:
         }
     
     def validate(self):
-        """설정 유효성 검사"""
-        # API 키 검사
+        """Validate configuration"""
+        # Skip API key validation for local models
         if self.embedding.provider != "local" and not self.embedding.api_key:
-            env_vars = ["EMBEDDING_API_KEY"]
-            if self.embedding.provider == "openai":
-                env_vars.append("OPENAI_API_KEY")
-            elif self.embedding.provider == "anthropic":
-                env_vars.append("ANTHROPIC_API_KEY")
-            raise ValueError(
-                f"임베딩 API 키가 필요합니다. "
-                f"다음 환경 변수 중 하나를 설정하세요: {', '.join(env_vars)}"
-            )
+            # Check if using local sentence-transformers
+            if self.embedding.model and "sentence-transformers" in self.embedding.model:
+                pass  # Local models don't need API keys
+            else:
+                env_vars = ["EMBEDDING_API_KEY"]
+                if self.embedding.provider == "openai":
+                    env_vars.append("OPENAI_API_KEY")
+                elif self.embedding.provider == "anthropic":
+                    env_vars.append("ANTHROPIC_API_KEY")
+                # Just warn, don't fail
+                import warnings
+                warnings.warn(
+                    f"Embedding API key not found. "
+                    f"Set one of these environment variables for API embeddings: {', '.join(env_vars)}"
+                )
         
         if self.llm.provider != "local" and not self.llm.api_key:
             env_vars = ["LLM_API_KEY"]
@@ -260,10 +266,15 @@ class Settings:
                 env_vars.append("OPENAI_API_KEY")
             elif self.llm.provider == "anthropic":
                 env_vars.append("ANTHROPIC_API_KEY")
-            raise ValueError(
-                f"LLM API 키가 필요합니다. "
-                f"다음 환경 변수 중 하나를 설정하세요: {', '.join(env_vars)}"
-            )
+            # For local/mock models, just warn
+            if self.llm.model in ["mock-llm", "llama-3.2-3b"] or self.llm.provider == "local":
+                pass  # Local models don't need API key
+            else:
+                import warnings
+                warnings.warn(
+                    f"LLM API key not found. "
+                    f"Set one of these environment variables for API models: {', '.join(env_vars)}"
+                )
         
         # 디렉토리 생성
         try:

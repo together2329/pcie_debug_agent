@@ -8,7 +8,7 @@ from typing import Optional
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from src.cli.commands import analyze, index, search, report, config, test
+from src.cli.commands import analyze, index, search, report, config, test, model
 from src.cli.utils.output import console, print_banner
 from src.config.settings import Settings, load_settings
 
@@ -83,6 +83,14 @@ cli.add_command(search.search)
 cli.add_command(report.report)
 cli.add_command(config.config)
 cli.add_command(test.test)
+cli.add_command(model.model)
+
+# Import and add vectordb command
+try:
+    from src.cli.commands import vectordb
+    cli.add_command(vectordb.vectordb)
+except ImportError:
+    pass  # vectordb command not available
 
 
 def main():

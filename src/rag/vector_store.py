@@ -6,6 +6,7 @@ import faiss
 import numpy as np
 from pathlib import Path
 import pickle
+import json
 import logging
 from typing import List, Tuple, Dict, Any, Optional
 
@@ -35,6 +36,27 @@ class FAISSVectorStore:
         try:
             # 인덱스 경로가 디렉토리인 경우 처리
             if Path(self.index_path).is_dir():
+                # Check for separate files format (new format)
+                separate_files_path = Path(self.index_path)
+                index_file = separate_files_path / "index.faiss"
+                metadata_file = separate_files_path / "metadata.json"
+                documents_file = separate_files_path / "documents.json"
+                
+                if index_file.exists() and metadata_file.exists():
+                    # Load from separate files
+                    try:
+                        import json
+                        self.index = faiss.read_index(str(index_file))
+                        with open(metadata_file, 'r', encoding='utf-8') as f:
+                            self.metadata = json.load(f)
+                        # Update dimension from loaded index
+                        self.dimension = self.index.d
+                        logger.info(f"Loaded index from separate files in {self.index_path}")
+                        return
+                    except Exception as e:
+                        logger.warning(f"Failed to load from separate files: {e}")
+                
+                # Fall back to single file format
                 self.index_path = Path(self.index_path) / "index.faiss"
             
             # 인덱스 파일이 존재하는 경우 로드
@@ -126,16 +148,35 @@ class FAISSVectorStore:
     def _save_index(self):
         """인덱스 저장"""
         try:
-            # 디렉토리 생성
-            self.index_path.parent.mkdir(parents=True, exist_ok=True)
+            # Ensure index_path is a Path object
+            index_path = Path(self.index_path)
             
-            # 인덱스 저장
-            with open(self.index_path, 'wb') as f:
-                pickle.dump({
-                    'index': self.index,
-                    'metadata': self.metadata
-                }, f)
-            logger.info(f"Saved index to {self.index_path}")
+            # Check if index_path is a directory (new format)
+            if index_path.is_dir():
+                # Save in separate files format
+                directory = index_path
+                directory.mkdir(parents=True, exist_ok=True)
+                
+                # Save index
+                faiss.write_index(self.index, str(directory / "index.faiss"))
+                
+                # Save metadata
+                with open(directory / "metadata.json", 'w', encoding='utf-8') as f:
+                    json.dump(self.metadata, f, ensure_ascii=False, indent=2)
+                
+                logger.info(f"Saved index to {directory} (separate files format)")
+            else:
+                # Save in single file format (old format)
+                # 디렉토리 생성
+                index_path.parent.mkdir(parents=True, exist_ok=True)
+                
+                # 인덱스 저장
+                with open(index_path, 'wb') as f:
+                    pickle.dump({
+                        'index': self.index,
+                        'metadata': self.metadata
+                    }, f)
+                logger.info(f"Saved index to {index_path}")
         except Exception as e:
             logger.error(f"Error saving index: {str(e)}")
             raise

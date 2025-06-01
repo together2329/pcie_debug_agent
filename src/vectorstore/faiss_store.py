@@ -9,10 +9,11 @@ import json
 class FAISSVectorStore:
     """FAISS-based vector store for efficient similarity search"""
     
-    def __init__(self, dimension: int, index_type: str = "IndexFlatIP"):
+    def __init__(self, dimension: int, index_type: str = "IndexFlatIP", index_path: Optional[str] = None):
         """Initialize FAISS vector store"""
         self.dimension = dimension
         self.index_type = index_type
+        self.index_path = index_path
         self.logger = logging.getLogger(__name__)
         
         # Initialize index
@@ -26,6 +27,10 @@ class FAISSVectorStore:
         # Store metadata
         self.metadata = []
         self.documents = []
+        
+        # Try to load existing index if path provided
+        if index_path:
+            self.load_index(index_path)
     
     def add_documents(self, 
                      embeddings: List[List[float]], 

@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 
 from src.models.model_selector import get_model_selector
-from src.rag.vector_store import FAISSVectorStore
+from src.vectorstore.faiss_store import FAISSVectorStore
 from src.rag.enhanced_rag_engine import EnhancedRAGEngine
 from src.config.settings import load_settings
 from src.cli.utils.output import print_success, print_error, print_info, print_warning
@@ -69,23 +69,36 @@ Type your PCIe questions directly or use slash commands.
             if self.verbose:
                 print("🔧 Initializing PCIe Debug Agent...")
             
-            # Load vector store
-            self.vector_store = FAISSVectorStore(
-                index_path="data/vectorstore",
-                dimension=384
-            )
+            # Try to load vector store (optional)
+            vector_db_path = Path("data/vectorstore")
+            self.vector_store = None
+            self.rag_enabled = False
             
-            if self.verbose:
-                print(f"   Vector store: {self.vector_store.index.ntotal} documents")
+            if vector_db_path.exists():
+                try:
+                    # Use the load class method to load existing store
+                    self.vector_store = FAISSVectorStore.load(str(vector_db_path))
+                    self.rag_enabled = True
+                    
+                    if self.verbose:
+                        print(f"   Vector store: {self.vector_store.index.ntotal} documents")
+                except Exception as e:
+                    print_warning(f"⚠️ Vector database found but couldn't load: {e}")
+                    print_info("   Continuing without RAG support")
+            else:
+                print_info("ℹ️ No vector database found. RAG features disabled.")
+                print_info("   Run 'pcie-debug vectordb build' to enable semantic search")
             
-            # Create model wrapper for RAG with embedding support
+            # Create model wrapper
             from sentence_transformers import SentenceTransformer
             import numpy as np
             
             class ModelWrapper:
-                def __init__(self, selector):
+                def __init__(self, selector, rag_enabled=False):
                     self.selector = selector
-                    self.embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+                    self.rag_enabled = rag_enabled
+                    if rag_enabled:
+                        self.embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
                 
                 def generate_completion(self, prompt: str, **kwargs) -> str:
                     # Filter out parameters that LocalLLMProvider doesn't support
@@ -95,17 +108,26 @@ Type your PCIe questions directly or use slash commands.
                 
                 def generate_embeddings(self, texts: List[str]) -> np.ndarray:
                     """Generate embeddings for texts"""
+                    if not self.rag_enabled:
+                        raise RuntimeError("RAG not enabled - no vector database")
                     embeddings = self.embedding_model.encode(texts)
                     return np.array(embeddings)
             
-            # Initialize RAG engine
-            self.rag_engine = EnhancedRAGEngine(
-                vector_store=self.vector_store,
-                model_manager=ModelWrapper(self.model_selector)
-            )
+            # Initialize RAG engine only if vector store is available
+            if self.rag_enabled and self.vector_store:
+                self.rag_engine = EnhancedRAGEngine(
+                    vector_store=self.vector_store,
+                    model_manager=ModelWrapper(self.model_selector, rag_enabled=True)
+                )
+            else:
+                # Use direct model without RAG
+                self.rag_engine = None
+                self.model_wrapper = ModelWrapper(self.model_selector, rag_enabled=False)
             
             if self.verbose:
                 print("✅ System ready!")
+                if not self.rag_enabled:
+                    print("   (Running in direct mode without RAG)")
                 
         except Exception as e:
             print_error(f"Failed to initialize system: {e}")
@@ -265,10 +287,13 @@ Examples:
         doc_count = self.vector_store.index.ntotal if self.vector_store else 0
         
         verbose_status = "ON" if self.analysis_verbose else "OFF"
+        rag_status = "ENABLED" if self.rag_enabled else "DISABLED"
+        
         print(f"""
 🔧 PCIe Debug Agent Status
 {'='*40}
 Model: {current_model}
+RAG Mode: {rag_status}
 Documents: {doc_count:,}
 Turns: {self.turn_count}/{self.max_turns}
 Memory entries: {len(self.memory_manager.get_memory())}
@@ -281,6 +306,11 @@ Verbose Analysis: {verbose_status}
         """Search knowledge base"""
         if not arg:
             print("Usage: /search <query>")
+            return
+        
+        if not self.rag_enabled or not self.vector_store:
+            print_error("❌ Vector database not loaded. RAG features are disabled.")
+            print_info("   Run 'pcie-debug vectordb build' to enable search")
             return
         
         try:
@@ -321,19 +351,42 @@ Verbose Analysis: {verbose_status}
             
             print(f"🔍 Analyzing log file: {log_path.name}")
             
-            from src.rag.enhanced_rag_engine import RAGQuery
-            rag_query = RAGQuery(query=f"Analyze this PCIe log file: {log_content}", context_window=5)
-            result = self.rag_engine.query(rag_query)
+            if self.rag_enabled and self.rag_engine:
+                # Use RAG for analysis
+                from src.rag.enhanced_rag_engine import RAGQuery
+                rag_query = RAGQuery(query=f"Analyze this PCIe log file: {log_content}", context_window=5)
+                result = self.rag_engine.query(rag_query)
+                
+                if result and hasattr(result, 'answer'):
+                    response = result.answer
+                else:
+                    response = None
+            else:
+                # Direct analysis without RAG
+                prompt = f"""You are a PCIe debugging expert. Analyze the following PCIe log file and provide:
+
+1. **Summary**: Overview of the log contents
+2. **Issues Found**: Any errors, warnings, or anomalies
+3. **Root Cause Analysis**: Likely causes of any issues
+4. **Recommendations**: Steps to debug or fix issues
+
+Log file: {log_path.name}
+Contents:
+{log_content[:5000]}...  # Truncate if too long
+
+Please provide a comprehensive analysis."""
+                
+                response = self.model_wrapper.generate_completion(prompt)
             
-            if result and hasattr(result, 'answer'):
+            if response:
                 print("\n💡 Analysis Result:")
                 print("-" * 60)
-                print(result.answer)
+                print(response)
                 print("-" * 60)
                 
                 # Add to conversation history
                 self._add_to_history("system", f"Analyzed log file: {log_path.name}")
-                self._add_to_history("assistant", result.answer)
+                self._add_to_history("assistant", response)
             else:
                 print_error("❌ Analysis failed")
                 
@@ -432,31 +485,65 @@ Verbose Analysis: {verbose_status}
             model_name = self.model_selector.get_current_model()
             print(f"\n🔍 Analyzing with {model_name}...")
             
-            if self.analysis_verbose:
-                print(f"\n📝 Query: '{query}'")
-                print("\n🔧 Analysis Pipeline:")
-                print("  1️⃣ Generating embeddings for query...")
-            
             start_time = time.time()
             
-            # Use RAG engine for analysis
-            from src.rag.enhanced_rag_engine import RAGQuery
-            rag_query = RAGQuery(query=query, context_window=5)
-            
-            if self.analysis_verbose:
-                print("  2️⃣ Searching vector database...")
-            
-            result = self.rag_engine.query(rag_query)
-            
-            end_time = time.time()
-            
-            if self.analysis_verbose:
-                print(f"  3️⃣ Retrieved {len(getattr(result, 'sources', []))} source documents")
-                print(f"  4️⃣ Generating LLM response with {model_name}...")
-            
-            if result and hasattr(result, 'answer'):
-                response = result.answer
+            if self.rag_enabled and self.rag_engine:
+                # Use RAG pipeline
+                if self.analysis_verbose:
+                    print(f"\n📝 Query: '{query}'")
+                    print("\n🔧 Analysis Pipeline (RAG):")
+                    print("  1️⃣ Generating embeddings for query...")
                 
+                # Use RAG engine for analysis
+                from src.rag.enhanced_rag_engine import RAGQuery
+                rag_query = RAGQuery(query=query, context_window=5)
+                
+                if self.analysis_verbose:
+                    print("  2️⃣ Searching vector database...")
+                
+                result = self.rag_engine.query(rag_query)
+                
+                end_time = time.time()
+                
+                if self.analysis_verbose:
+                    print(f"  3️⃣ Retrieved {len(getattr(result, 'sources', []))} source documents")
+                    print(f"  4️⃣ Generating LLM response with {model_name}...")
+                
+                if result and hasattr(result, 'answer'):
+                    response = result.answer
+                    sources = getattr(result, 'sources', [])
+                    confidence = getattr(result, 'confidence', None)
+                else:
+                    response = "No response generated"
+                    sources = []
+                    confidence = None
+            else:
+                # Direct LLM mode without RAG
+                if self.analysis_verbose:
+                    print(f"\n📝 Query: '{query}'")
+                    print("\n🔧 Analysis Pipeline (Direct):")
+                    print("  🤖 Sending query directly to LLM...")
+                
+                # Create a PCIe-focused prompt
+                prompt = f"""You are a PCIe debugging expert. Please provide a detailed technical analysis for the following query:
+
+Query: {query}
+
+Please structure your response with:
+1. **Analysis**: Technical explanation
+2. **Root Cause**: Most likely cause of the issue
+3. **Impact**: How this affects system operation
+4. **Recommendations**: Specific debugging steps or fixes
+
+Be concise but thorough in your technical analysis."""
+                
+                response = self.model_wrapper.generate_completion(prompt)
+                sources = []
+                confidence = None
+                
+                end_time = time.time()
+            
+            if response and response != "No response generated":
                 print("\n💡 Response:")
                 print("-" * 60)
                 print(response)
@@ -465,26 +552,32 @@ Verbose Analysis: {verbose_status}
                 if self.analysis_verbose:
                     print(f"\n📊 Analysis Details:")
                     print(f"  ⏱️  Response time: {end_time - start_time:.1f}s")
-                    print(f"  📚 Sources used: {len(getattr(result, 'sources', []))}")
-                    if hasattr(result, 'confidence'):
-                        print(f"  📊 Confidence: {result.confidence:.1%}")
                     
-                    # Show source details
-                    sources = getattr(result, 'sources', [])
-                    if sources and len(sources) > 0:
-                        print(f"\n📖 Source Documents:")
-                        for i, source in enumerate(sources[:3], 1):  # Show top 3 sources
-                            source_info = source.get('metadata', {})
-                            content_preview = source.get('content', '')[:100] + "..."
-                            print(f"  {i}. Source: {source_info.get('source', 'Unknown')}")
-                            print(f"     Preview: {content_preview}")
-                            if 'score' in source:
-                                print(f"     Relevance: {source['score']:.3f}")
+                    if self.rag_enabled and 'result' in locals() and hasattr(result, 'sources'):
+                        # RAG mode - show sources
+                        print(f"  📚 Sources used: {len(result.sources)}")
+                        if hasattr(result, 'confidence'):
+                            print(f"  📊 Confidence: {result.confidence:.1%}")
+                        
+                        # Show source details
+                        if result.sources and len(result.sources) > 0:
+                            print(f"\n📖 Source Documents:")
+                            for i, source in enumerate(result.sources[:3], 1):  # Show top 3 sources
+                                source_info = source.get('metadata', {})
+                                content_preview = source.get('content', '')[:100] + "..."
+                                print(f"  {i}. Source: {source_info.get('source', 'Unknown')}")
+                                print(f"     Preview: {content_preview}")
+                                if 'score' in source:
+                                    print(f"     Relevance: {source['score']:.3f}")
+                    else:
+                        # Direct mode - no sources
+                        print("  📚 Mode: Direct LLM (no RAG)")
                 elif self.verbose:
                     print(f"\n⏱️ Response time: {end_time - start_time:.1f}s")
-                    print(f"📚 Sources: {len(getattr(result, 'sources', []))}")
-                    if hasattr(result, 'confidence'):
-                        print(f"📊 Confidence: {result.confidence:.1%}")
+                    if self.rag_enabled and 'result' in locals() and hasattr(result, 'sources'):
+                        print(f"📚 Sources: {len(result.sources)}")
+                        if hasattr(result, 'confidence'):
+                            print(f"📊 Confidence: {result.confidence:.1%}")
                 
                 # Add to conversation history
                 self._add_to_history("user", query)
