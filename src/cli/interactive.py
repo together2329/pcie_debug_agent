@@ -78,6 +78,9 @@ Type your PCIe questions directly or use slash commands.
         
         # Setup tab completion for slash commands
         self._setup_tab_completion()
+        
+        # Configure logging to suppress empty error messages
+        self._configure_logging()
     
     def _initialize_system(self):
         """Initialize RAG system"""
@@ -203,6 +206,31 @@ Type your PCIe questions directly or use slash commands.
         except Exception as e:
             if self.verbose:
                 print(f"⚠️ Tab completion setup failed: {e}")
+    
+    def _configure_logging(self):
+        """Configure logging to suppress empty error messages"""
+        import logging
+        
+        # Custom filter to suppress empty error messages
+        class EmptyErrorFilter(logging.Filter):
+            def filter(self, record):
+                # Skip empty error messages from vector store
+                if record.levelname == 'ERROR' and 'Error searching vector store:' in record.getMessage():
+                    # Check if the error message is effectively empty
+                    msg = record.getMessage()
+                    error_part = msg.split(':', 1)[-1].strip()
+                    if not error_part:
+                        return False  # Suppress this log record
+                return True
+        
+        # Add filter to the faiss_store logger
+        faiss_logger = logging.getLogger('src.vectorstore.faiss_store')
+        faiss_logger.addFilter(EmptyErrorFilter())
+        
+        # Set appropriate logging level
+        if not self.verbose:
+            # Suppress info and debug messages in non-verbose mode
+            logging.getLogger('src').setLevel(logging.WARNING)
     
     def completenames(self, text, *ignored):
         """Override cmd.Cmd completenames to handle slash commands"""

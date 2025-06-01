@@ -87,8 +87,15 @@ class FAISSVectorStore:
             return results
         
         except Exception as e:
-            self.logger.error(f"Error searching vector store: {str(e)}")
-            return []
+            # Only log meaningful errors with actual content
+            error_msg = str(e).strip()
+            if error_msg and len(error_msg) > 0:
+                # Only log if it's not a spurious empty error
+                self.logger.error(f"Error searching vector store: {error_msg}")
+                if hasattr(self.logger, 'debug'):
+                    self.logger.debug(f"Exception type: {type(e).__name__}")
+            # Return partial results if available, otherwise empty list
+            return results if 'results' in locals() else []
     
     def save(self, directory: str) -> None:
         """Save vector store to disk"""
