@@ -26,7 +26,7 @@ class RAGQuery:
     context_window: int = 5
     rerank: bool = True
     filters: Optional[Dict[str, Any]] = None
-    min_similarity: float = 0.5
+    min_similarity: float = 0.1  # Lowered from 0.5 to 0.1 for better recall
     include_metadata: bool = True
 
 @dataclass
