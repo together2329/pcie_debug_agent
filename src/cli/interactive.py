@@ -188,6 +188,8 @@ Available Commands:
   /verbose [on/off]    Toggle verbose analysis mode
   /rag [on/off]        Toggle RAG (Retrieval-Augmented Generation)
   /rag_status          Show detailed RAG and vector DB status
+  /knowledge_base      Show RAG knowledge base content and status
+  /kb                  Alias for /knowledge_base
   /vim                 Enable vim mode
   /exit, /quit         Exit the shell
 
@@ -656,6 +658,130 @@ Please provide a comprehensive analysis."""
             print(f"   • Use '/verbose on' to see detailed analysis steps")
         
         print("="*60)
+    
+    def do_knowledge_base(self, arg):
+        """Show current RAG knowledge base content and status"""
+        print(f"\n📚 RAG Knowledge Base Status")
+        print("="*80)
+        
+        # Check if vector database exists
+        vector_db_path = Path("data/vectorstore")
+        if not vector_db_path.exists():
+            print_error("❌ Vector database not found")
+            print_info("   Run 'pcie-debug vectordb build' to create knowledge base")
+            print("="*80)
+            return
+        
+        try:
+            # Load vector store and get statistics
+            from src.vectorstore.faiss_store import FAISSVectorStore
+            store = FAISSVectorStore.load(str(vector_db_path))
+            
+            print(f"\n🔧 Database Technical Details:")
+            print(f"   Location: {vector_db_path}")
+            print(f"   Total chunks: {store.index.ntotal}")
+            print(f"   Dimensions: {store.dimension}D vectors")
+            print(f"   Storage type: FAISS IndexFlatIP (cosine similarity)")
+            
+            # Get embedding model info
+            embedding_info = self.embedding_selector.get_model_info()
+            current_embedding = self.embedding_selector.get_current_model()
+            embedding_dim = self.embedding_selector.get_current_provider().get_dimension()
+            
+            print(f"   Embedding model: {current_embedding}")
+            print(f"   Provider: {embedding_info.get('provider', 'unknown')}")
+            
+            # Check compatibility
+            if embedding_dim == store.dimension:
+                print(f"   Compatibility: ✅ COMPATIBLE ({embedding_dim}D)")
+            else:
+                print(f"   Compatibility: ❌ MISMATCH (DB: {store.dimension}D, Model: {embedding_dim}D)")
+            
+            # Analyze document sources from metadata
+            if hasattr(store, 'metadata') and store.metadata:
+                sources = {}
+                for meta in store.metadata:
+                    source = meta.get('source', 'unknown')
+                    # Extract just the filename for cleaner display
+                    filename = Path(source).name if source != 'unknown' else 'unknown'
+                    sources[filename] = sources.get(filename, 0) + 1
+                
+                print(f"\n📖 Knowledge Base Content ({len(sources)} files, {len(store.metadata)} chunks):")
+                print("-" * 80)
+                
+                # Calculate total file size
+                total_size = 0
+                for filename, chunk_count in sorted(sources.items()):
+                    if filename != 'unknown':
+                        file_path = Path("data/knowledge_base") / filename
+                        if file_path.exists():
+                            size_kb = file_path.stat().st_size / 1024
+                            total_size += size_kb
+                            
+                            # Determine content focus based on filename
+                            content_focus = self._get_content_focus(filename)
+                            
+                            print(f"  📄 {filename:<35} {chunk_count} chunks ({size_kb:.1f}KB)")
+                            print(f"     {' '*37} └─ {content_focus}")
+                        else:
+                            print(f"  📄 {filename:<35} {chunk_count} chunks (file not found)")
+                
+                print(f"\n📊 Knowledge Base Summary:")
+                print(f"   Total files: {len([f for f in sources.keys() if f != 'unknown'])}")
+                print(f"   Total size: {total_size:.1f}KB")
+                print(f"   Chunking strategy: ~1000 words per chunk with 200 word overlap")
+                
+                # Show coverage areas
+                coverage_areas = self._get_coverage_areas(sources.keys())
+                print(f"\n🎯 Coverage Areas:")
+                for area in coverage_areas:
+                    print(f"   • {area}")
+                
+            else:
+                print(f"\n📖 Knowledge Base Content:")
+                print("   No metadata available - unable to show source breakdown")
+            
+        except Exception as e:
+            print_error(f"❌ Error analyzing knowledge base: {e}")
+        
+        print("\n" + "="*80)
+    
+    def do_kb(self, arg):
+        """Alias for /knowledge_base command"""
+        self.do_knowledge_base(arg)
+    
+    def _get_content_focus(self, filename):
+        """Determine content focus based on filename"""
+        focus_map = {
+            "aer_error_handling.md": "Advanced Error Reporting, correctable/uncorrectable errors",
+            "power_management_issues.md": "PCIe power states (D0-D3, L0-L3), ASPM configuration", 
+            "pcie_error_scenarios.md": "Common PCIe error scenarios and troubleshooting",
+            "ltssm_states_guide.md": "Link Training State Machine states and transitions",
+            "tlp_error_analysis.md": "Transaction Layer Packet analysis and debugging",
+            "signal_integrity_troubleshooting.md": "Signal integrity issues and physical layer debugging"
+        }
+        return focus_map.get(filename, "PCIe technical documentation")
+    
+    def _get_coverage_areas(self, filenames):
+        """Get coverage areas based on available files"""
+        areas = []
+        if any("aer" in f for f in filenames):
+            areas.append("Error handling and AER configuration")
+        if any("power" in f for f in filenames):
+            areas.append("Power management troubleshooting")
+        if any("ltssm" in f for f in filenames):
+            areas.append("Link training and LTSSM states")
+        if any("tlp" in f for f in filenames):
+            areas.append("Transaction layer packet analysis") 
+        if any("signal" in f for f in filenames):
+            areas.append("Signal integrity issues")
+        if any("error" in f for f in filenames):
+            areas.append("Common error scenarios and solutions")
+        
+        if not areas:
+            areas.append("PCIe technical documentation")
+        
+        return areas
     
     def do_rag_model(self, arg):
         """List or switch RAG embedding models"""
