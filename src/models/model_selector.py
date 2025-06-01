@@ -33,6 +33,12 @@ class BaseModelProvider(ABC):
         """Generate completion from prompt"""
         pass
     
+    def generate_completion_stream(self, prompt: str, **kwargs):
+        """Generate streaming completion from prompt"""
+        # Default implementation: fallback to non-streaming
+        result = self.generate_completion(prompt, **kwargs)
+        yield result
+    
     @abstractmethod
     def get_info(self) -> Dict[str, Any]:
         """Get model information"""
@@ -106,6 +112,24 @@ class OpenAIModelProvider(BaseModelProvider):
             return response.choices[0].message.content
         except Exception as e:
             raise RuntimeError(f"OpenAI API error: {e}")
+    
+    def generate_completion_stream(self, prompt: str, **kwargs):
+        """Generate streaming completion"""
+        try:
+            stream = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=kwargs.get("temperature", 0.1),
+                max_tokens=kwargs.get("max_tokens", 1000),
+                stream=True
+            )
+            
+            for chunk in stream:
+                if chunk.choices[0].delta.content is not None:
+                    yield chunk.choices[0].delta.content
+                    
+        except Exception as e:
+            raise RuntimeError(f"OpenAI API streaming error: {e}")
     
     def get_info(self) -> Dict[str, Any]:
         return {
@@ -288,6 +312,28 @@ class ModelSelector:
                     if self.switch_model(fallback_models[0]):
                         provider = self.get_provider()
                         return provider.generate_completion(prompt, **kwargs)
+                
+                # If no fallbacks work, re-raise original error
+                raise e
+            else:
+                raise e
+    
+    def generate_completion_stream(self, prompt: str, **kwargs):
+        """Generate streaming completion using current model"""
+        try:
+            provider = self.get_provider()
+            yield from provider.generate_completion_stream(prompt, **kwargs)
+        except (FileNotFoundError, ValueError) as e:
+            # If current model fails, try to fall back to an available model
+            if "Model file not found" in str(e) or "API key not found" in str(e):
+                fallback_models = self._get_available_models()
+                
+                if fallback_models:
+                    print(f"⚠️ Current model unavailable, falling back to {fallback_models[0]}")
+                    if self.switch_model(fallback_models[0]):
+                        provider = self.get_provider()
+                        yield from provider.generate_completion_stream(prompt, **kwargs)
+                        return
                 
                 # If no fallbacks work, re-raise original error
                 raise e
