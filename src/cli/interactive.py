@@ -75,6 +75,9 @@ Type your PCIe questions directly or use slash commands.
         
         # Initialize system
         self._initialize_system()
+        
+        # Setup tab completion for slash commands
+        self._setup_tab_completion()
     
     def _initialize_system(self):
         """Initialize RAG system"""
@@ -185,6 +188,140 @@ Type your PCIe questions directly or use slash commands.
                 import traceback
                 traceback.print_exc()
     
+    def _setup_tab_completion(self):
+        """Setup tab completion for slash commands"""
+        try:
+            # Set up readline tab completion
+            readline.set_completer_delims(' \t\n;')
+            readline.parse_and_bind("tab: complete")
+            
+            # Enable history
+            readline.set_history_length(1000)
+            
+            if self.verbose:
+                print("✅ Tab completion enabled")
+        except Exception as e:
+            if self.verbose:
+                print(f"⚠️ Tab completion setup failed: {e}")
+    
+    def completenames(self, text, *ignored):
+        """Override cmd.Cmd completenames to handle slash commands"""
+        if text.startswith('/'):
+            # Handle slash command completion
+            text_without_slash = text[1:]  # Remove the leading '/'
+            commands = self._get_available_commands()
+            matches = []
+            
+            for cmd_name, _ in commands:
+                if cmd_name.startswith(text_without_slash):
+                    matches.append('/' + cmd_name)
+            
+            return matches
+        else:
+            # Default behavior for non-slash commands
+            return super().completenames(text, *ignored)
+    
+    def complete(self, text, state):
+        """Enhanced completion that handles both slash commands and arguments"""
+        # Get the current line
+        line = readline.get_line_buffer()
+        
+        # Check if we're completing a slash command
+        if line.strip().startswith('/'):
+            # Split the line to see if we're completing the command or its arguments
+            parts = line.strip().split()
+            
+            if len(parts) == 1 and not line.endswith(' '):
+                # We're still completing the command name
+                matches = self.completenames(text, None)
+            else:
+                # We're completing arguments for a specific command
+                if len(parts) >= 1:
+                    cmd_with_slash = parts[0]
+                    cmd_name = cmd_with_slash[1:]  # Remove the '/'
+                    matches = self._complete_command_args(cmd_name, text, line)
+                else:
+                    matches = []
+        else:
+            # For non-slash commands, use default completion
+            matches = []
+        
+        # Return the match for the current state
+        try:
+            return matches[state]
+        except IndexError:
+            return None
+    
+    def _complete_command_args(self, cmd_name, text, line):
+        """Complete arguments for specific commands"""
+        matches = []
+        
+        # Command-specific argument completion
+        if cmd_name == 'model':
+            models = ["gpt-4o-mini", "mock-llm", "llama-3.2-3b", "deepseek-r1-7b", "gpt-4o", "gpt-4"]
+            matches = [model for model in models if model.startswith(text)]
+        
+        elif cmd_name == 'rag_model':
+            embedding_models = ["text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002", 
+                              "all-MiniLM-L6-v2", "all-mpnet-base-v2", "multi-qa-MiniLM-L6-cos-v1"]
+            matches = [model for model in embedding_models if model.startswith(text)]
+        
+        elif cmd_name == 'rag_mode':
+            modes = ["semantic", "hybrid", "keyword"]
+            matches = [mode for mode in modes if mode.startswith(text)]
+        
+        elif cmd_name == 'rag':
+            options = ["on", "off"]
+            matches = [opt for opt in options if opt.startswith(text)]
+        
+        elif cmd_name == 'verbose':
+            options = ["on", "off"]
+            matches = [opt for opt in options if opt.startswith(text)]
+        
+        elif cmd_name == 'stream':
+            options = ["on", "off"]
+            matches = [opt for opt in options if opt.startswith(text)]
+        
+        elif cmd_name == 'analyze':
+            # Complete file paths for log files
+            import glob
+            try:
+                # Look for log files
+                if text:
+                    pattern = text + '*'
+                else:
+                    pattern = '*'
+                
+                # Search in common log directories
+                log_patterns = [
+                    pattern,
+                    f"logs/{pattern}",
+                    f"sample_logs/{pattern}",
+                    f"*.log"
+                ]
+                
+                for log_pattern in log_patterns:
+                    matches.extend(glob.glob(log_pattern))
+                
+                # Filter matches that start with text
+                matches = [match for match in matches if match.startswith(text)]
+            except:
+                matches = []
+        
+        elif cmd_name in ['session']:
+            # For session commands, offer subcommands
+            if 'save' not in line and 'load' not in line:
+                subcommands = ["save", "load"]
+                matches = [sub for sub in subcommands if sub.startswith(text)]
+        
+        elif cmd_name in ['memory']:
+            # For memory commands, offer subcommands
+            if 'set' not in line and 'del' not in line:
+                subcommands = ["set", "del"]
+                matches = [sub for sub in subcommands if sub.startswith(text)]
+        
+        return matches
+    
     def do_help(self, arg):
         """Show help information"""
         if arg:
@@ -216,6 +353,12 @@ Available Commands:
 
 Direct Usage:
   Just type your PCIe debugging questions directly!
+  
+💡 Tab Completion:
+  • Press TAB to auto-complete slash commands
+  • Press TAB again to cycle through options
+  • Works for commands: /ra[TAB] → /rag, /rag_mode, etc.
+  • Works for arguments: /rag_mode [TAB] → semantic, hybrid, keyword
   
 Examples:
   > Why is PCIe link training failing?
@@ -2019,7 +2162,10 @@ Be concise but thorough in your technical analysis."""
         return provider_map.get(model_name, "Unknown")
     
     def cmdloop(self, intro=None):
-        """Override cmdloop to handle errors gracefully"""
+        """Override cmdloop to set up completion and handle errors gracefully"""
+        # Set the completer function
+        readline.set_completer(self.complete)
+        
         try:
             super().cmdloop(intro)
         except KeyboardInterrupt:
