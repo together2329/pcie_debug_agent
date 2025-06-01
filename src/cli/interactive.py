@@ -118,12 +118,29 @@ Type your PCIe questions directly or use slash commands.
                     provider = self.embedding_selector.get_current_provider()
                     return provider.encode(texts)
             
-            # Initialize RAG engine only if vector store is available
+            # Initialize RAG engine only if vector store is available and compatible
             if self.rag_enabled and self.vector_store:
-                self.rag_engine = EnhancedRAGEngine(
-                    vector_store=self.vector_store,
-                    model_manager=ModelWrapper(self.model_selector, self.embedding_selector, rag_enabled=True)
-                )
+                # Check dimension compatibility
+                embedding_dim = self.embedding_selector.get_current_provider().get_dimension()
+                vector_db_dim = self.vector_store.dimension
+                
+                if embedding_dim == vector_db_dim:
+                    self.rag_engine = EnhancedRAGEngine(
+                        vector_store=self.vector_store,
+                        model_manager=ModelWrapper(self.model_selector, self.embedding_selector, rag_enabled=True)
+                    )
+                else:
+                    # Dimension mismatch - disable RAG
+                    print_warning(f"⚠️  Dimension mismatch detected!")
+                    print_info(f"   Vector DB dimension: {vector_db_dim}")
+                    print_info(f"   Embedding model dimension: {embedding_dim}")
+                    print_info(f"   Current embedding model: {self.embedding_selector.get_current_model()}")
+                    print_info(f"   RAG temporarily disabled to prevent errors")
+                    print_info(f"   Run 'pcie-debug vectordb build --force' to rebuild with current embedding model")
+                    
+                    self.rag_enabled = False
+                    self.rag_engine = None
+                    self.model_wrapper = ModelWrapper(self.model_selector, self.embedding_selector, rag_enabled=False)
             else:
                 # Use direct model without RAG
                 self.rag_engine = None
@@ -170,6 +187,7 @@ Available Commands:
   /config              Show configuration
   /verbose [on/off]    Toggle verbose analysis mode
   /rag [on/off]        Toggle RAG (Retrieval-Augmented Generation)
+  /rag_status          Show detailed RAG and vector DB status
   /vim                 Enable vim mode
   /exit, /quit         Exit the shell
 
@@ -486,6 +504,19 @@ Please provide a comprehensive analysis."""
                     try:
                         print("🔄 Loading vector database...")
                         self.vector_store = FAISSVectorStore.load(str(vector_db_path))
+                        
+                        # Check dimension compatibility
+                        embedding_dim = self.embedding_selector.get_current_provider().get_dimension()
+                        vector_db_dim = self.vector_store.dimension
+                        
+                        if embedding_dim != vector_db_dim:
+                            print_error(f"❌ Dimension mismatch!")
+                            print_info(f"   Vector DB dimension: {vector_db_dim}")
+                            print_info(f"   Embedding model dimension: {embedding_dim}")
+                            print_info(f"   Current embedding model: {self.embedding_selector.get_current_model()}")
+                            print_info(f"   Run 'pcie-debug vectordb build --force' to rebuild with current embedding model")
+                            return
+                        
                         self.rag_enabled = True
                         
                         # Re-initialize RAG engine
@@ -512,6 +543,8 @@ Please provide a comprehensive analysis."""
                         
                         print_success("✅ RAG enabled successfully!")
                         print(f"   Vector store: {self.vector_store.index.ntotal} documents")
+                        print(f"   Embedding model: {self.embedding_selector.get_current_model()}")
+                        print(f"   Dimensions match: {embedding_dim}")
                     except Exception as e:
                         print_error(f"❌ Failed to enable RAG: {e}")
                         print_info("   Run 'pcie-debug vectordb build' to create vector database")
@@ -549,6 +582,80 @@ Please provide a comprehensive analysis."""
             print_info("   Queries will be sent directly to LLM without context retrieval")
         else:
             print_error("❌ Invalid option. Use: /rag on|off")
+    
+    def do_rag_status(self, arg):
+        """Show detailed RAG and vector database status"""
+        print(f"\n🔧 RAG Status Analysis")
+        print("="*60)
+        
+        # Show RAG enabled status
+        rag_status = "ENABLED" if self.rag_enabled else "DISABLED"
+        print(f"\nRAG Mode: {rag_status}")
+        
+        # Show embedding model info
+        current_embedding = self.embedding_selector.get_current_model()
+        embedding_info = self.embedding_selector.get_model_info()
+        embedding_dim = self.embedding_selector.get_current_provider().get_dimension()
+        
+        print(f"\nEmbedding Model:")
+        print(f"   Current: {current_embedding}")
+        print(f"   Provider: {embedding_info.get('provider', 'unknown')}")
+        print(f"   Dimension: {embedding_dim}")
+        print(f"   Cost: {embedding_info.get('cost', 'unknown')}")
+        
+        # Show vector database status
+        vector_db_path = Path("data/vectorstore")
+        if vector_db_path.exists():
+            try:
+                # Try to load and check compatibility
+                temp_store = FAISSVectorStore.load(str(vector_db_path))
+                vector_db_dim = temp_store.dimension
+                doc_count = temp_store.index.ntotal
+                
+                print(f"\nVector Database:")
+                print(f"   Location: {vector_db_path}")
+                print(f"   Documents: {doc_count:,}")
+                print(f"   Dimension: {vector_db_dim}")
+                
+                # Check compatibility
+                if embedding_dim == vector_db_dim:
+                    print(f"   Compatibility: ✅ COMPATIBLE")
+                    if not self.rag_enabled:
+                        print(f"   💡 You can enable RAG with '/rag on'")
+                else:
+                    print(f"   Compatibility: ❌ DIMENSION MISMATCH")
+                    print(f"   Issue: Embedding model ({embedding_dim}D) != Vector DB ({vector_db_dim}D)")
+                    print(f"   Solution: Rebuild vector database with current embedding model")
+                
+            except Exception as e:
+                print(f"\nVector Database:")
+                print(f"   Location: {vector_db_path}")
+                print(f"   Status: ❌ Error loading - {e}")
+        else:
+            print(f"\nVector Database:")
+            print(f"   Status: ❌ Not found")
+            print(f"   Location: {vector_db_path}")
+        
+        # Show recommendations
+        print(f"\n💡 Recommendations:")
+        if not vector_db_path.exists():
+            print(f"   • Run 'pcie-debug vectordb build' to create vector database")
+        elif not self.rag_enabled:
+            if vector_db_path.exists():
+                try:
+                    temp_store = FAISSVectorStore.load(str(vector_db_path))
+                    vector_db_dim = temp_store.dimension
+                    if embedding_dim != vector_db_dim:
+                        print(f"   • Run 'pcie-debug vectordb build --force' to rebuild for current embedding model")
+                    else:
+                        print(f"   • Run '/rag on' to enable RAG with existing vector database")
+                except:
+                    print(f"   • Run 'pcie-debug vectordb build --force' to rebuild vector database")
+        else:
+            print(f"   • RAG is working properly!")
+            print(f"   • Use '/verbose on' to see detailed analysis steps")
+        
+        print("="*60)
     
     def do_rag_model(self, arg):
         """List or switch RAG embedding models"""

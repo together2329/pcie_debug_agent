@@ -88,12 +88,17 @@ def build_vectordb(input_dir: str, output_dir: str, force: bool, chunk_size: int
             try:
                 print(f"  [{i}/{len(text_files)}] Processing {file_path.name}...", end='', flush=True)
                 
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
+                # Use DocumentChunker to process the file
+                chunks = chunker.chunk_documents(file_path)
                 
-                # Chunk the document
-                chunks = chunker.chunk_document(content, str(file_path))
-                documents.extend(chunks)
+                # Convert DocumentChunk objects to dictionaries
+                for chunk in chunks:
+                    documents.append({
+                        'content': chunk.content,
+                        'source': str(file_path),
+                        'chunk_id': chunk.chunk_id,
+                        'metadata': chunk.metadata
+                    })
                 
                 print(f" ✓ ({len(chunks)} chunks)")
                 
@@ -124,8 +129,7 @@ def build_vectordb(input_dir: str, output_dir: str, force: bool, chunk_size: int
         
         # Create vector store with correct dimension
         store = FAISSVectorStore(
-            dimension=embedding_info['dimension'],
-            index_path=str(output_path)
+            dimension=embedding_info['dimension']
         )
         
         # Add documents in batches

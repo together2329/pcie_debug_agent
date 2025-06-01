@@ -7,6 +7,12 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
+# Suppress Metal warnings and set quiet mode
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["GGML_METAL_LOG_LEVEL"] = "0"
+os.environ["LLAMA_CPP_LOG_LEVEL"] = "ERROR"
+
 import logging
 import time
 from src.models.local_llm_provider import LocalLLMProvider
@@ -57,8 +63,10 @@ class PCIeChatDemo:
             print("✅ Local LLM ready")
             
             # Create vector store
+            # Use the parent directory for the vector store path
+            vector_store_dir = Path(settings.vector_store.index_path).parent
             vector_store = FAISSVectorStore(
-                index_path=str(settings.vector_store.index_path),
+                index_path=str(vector_store_dir),
                 index_type=settings.vector_store.index_type,
                 dimension=settings.embedding.dimension
             )
