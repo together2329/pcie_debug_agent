@@ -298,6 +298,10 @@ Type your PCIe questions directly or use slash commands.
             modes = ["semantic", "hybrid", "keyword"]
             matches = [mode for mode in modes if mode.startswith(text)]
         
+        elif cmd_name in ['rag_files', 'rag_check']:
+            # No arguments needed for these commands
+            matches = []
+        
         elif cmd_name == 'rag':
             options = ["on", "off"]
             matches = [opt for opt in options if opt.startswith(text)]
@@ -375,6 +379,8 @@ Available Commands:
   /rag_status          Show detailed RAG and vector DB status
   /knowledge_base      Show RAG knowledge base content and status
   /kb                  Alias for /knowledge_base
+  /rag_files           Show which files are indexed in each RAG database
+  /rag_check           Quick check of current RAG database readiness
   /stream [on/off]     Toggle real-time streaming responses
   /vim                 Enable vim mode
   /exit, /quit         Exit the shell
@@ -1033,6 +1039,154 @@ Please provide a comprehensive analysis."""
     def do_kb(self, arg):
         """Alias for /knowledge_base command"""
         self.do_knowledge_base(arg)
+    
+    def do_rag_files(self, arg):
+        """Show which files are indexed in each RAG database"""
+        print(f"\n📂 RAG Database Files Overview")
+        print("=" * 80)
+        
+        # Get all available vector databases
+        models_info = self.vector_manager.list_models()
+        available_dbs = [(name, info) for name, info in models_info.items() if info['exists']]
+        
+        if not available_dbs:
+            print("❌ No RAG databases found")
+            print("   Run 'pcie-debug vectordb build' to create a database")
+            return
+        
+        # Check knowledge base source directory
+        kb_path = Path("data/knowledge_base")
+        source_files = set()
+        if kb_path.exists():
+            source_files = {f.name for f in kb_path.glob("*.md")}
+            print(f"\n📁 Source Knowledge Base Directory: {kb_path}")
+            print(f"   Total source files available: {len(source_files)}")
+            if source_files:
+                print("   Files:")
+                for f in sorted(source_files):
+                    print(f"     • {f}")
+        
+        print(f"\n🗄️ Vector Databases Status ({len(available_dbs)} databases):")
+        print("-" * 80)
+        
+        # For each database, show indexed files
+        for db_name, db_info in available_dbs:
+            print(f"\n📊 Database: {db_name}")
+            print(f"   Path: {Path(db_info['path']).name}")
+            
+            # Get statistics for this database
+            stats = self.vector_manager.get_stats(db_name)
+            if stats:
+                print(f"   Vectors: {stats['total_vectors']:,}")
+                print(f"   Dimension: {stats['dimension']}D")
+            
+            # Load this database temporarily to check files
+            try:
+                temp_store = self.vector_manager.load(db_name)
+                if temp_store and hasattr(temp_store, 'metadata'):
+                    # Extract unique files from metadata
+                    indexed_files = {}
+                    for meta in temp_store.metadata:
+                        source = meta.get('source', 'unknown')
+                        filename = Path(source).name if source != 'unknown' else 'unknown'
+                        if filename != 'unknown':
+                            indexed_files[filename] = indexed_files.get(filename, 0) + 1
+                    
+                    print(f"   Indexed files: {len(indexed_files)}")
+                    if indexed_files:
+                        for filename, chunks in sorted(indexed_files.items()):
+                            # Check if file still exists in source
+                            status = "✅" if filename in source_files else "⚠️"
+                            print(f"     {status} {filename} ({chunks} chunks)")
+                    
+                    # Check for missing files
+                    missing_in_db = source_files - set(indexed_files.keys())
+                    if missing_in_db:
+                        print(f"   ⚠️  Not indexed from source: {', '.join(sorted(missing_in_db))}")
+                else:
+                    print("   ⚠️  Unable to read file information")
+            except Exception as e:
+                print(f"   ❌ Error reading database: {e}")
+        
+        # Summary and recommendations
+        print(f"\n💡 Summary:")
+        current_model = self.embedding_selector.get_current_model()
+        print(f"   Current embedding model: {current_model}")
+        
+        current_db_exists = current_model in [name for name, _ in available_dbs]
+        if current_db_exists:
+            print(f"   ✅ Database exists for current model")
+        else:
+            print(f"   ❌ No database for current model")
+            print(f"   💡 Run 'pcie-debug vectordb build' to create it")
+        
+        print(f"\n📝 Legend:")
+        print(f"   ✅ = File exists in both source and database")
+        print(f"   ⚠️  = File in database but not in source (may be outdated)")
+        
+        print("\n" + "=" * 80)
+    
+    def do_rag_check(self, arg):
+        """Quick check of current RAG database readiness"""
+        current_model = self.embedding_selector.get_current_model()
+        
+        print(f"\n🔍 RAG Quick Check")
+        print("=" * 50)
+        print(f"Current Model: {current_model}")
+        
+        # Check if database exists
+        if not self.vector_manager.exists(current_model):
+            print(f"\n❌ No database for {current_model}")
+            print("   Run 'pcie-debug vectordb build' to create it")
+            return
+        
+        # Get stats
+        stats = self.vector_manager.get_stats(current_model)
+        if not stats:
+            print(f"\n⚠️  Database exists but cannot read stats")
+            return
+        
+        print(f"\n✅ Database Ready!")
+        print(f"   Vectors: {stats['total_vectors']:,}")
+        print(f"   Dimension: {stats['dimension']}D")
+        print(f"   Size: {stats['size_mb']:.1f}MB")
+        
+        # Check if loaded
+        if self.rag_enabled and self.vector_store:
+            print(f"\n✅ RAG Status: ACTIVE")
+            print(f"   Search mode: {self.rag_search_mode.upper()}")
+        else:
+            print(f"\n⚠️  RAG Status: NOT LOADED")
+            print(f"   Run '/rag on' to enable")
+        
+        # Quick file check
+        kb_path = Path("data/knowledge_base")
+        if kb_path.exists():
+            source_count = len(list(kb_path.glob("*.md")))
+            print(f"\n📁 Source files: {source_count}")
+            
+            # Check indexed files
+            try:
+                store = self.vector_manager.load(current_model)
+                if store and hasattr(store, 'metadata'):
+                    indexed_files = set()
+                    for meta in store.metadata:
+                        source = meta.get('source', 'unknown')
+                        filename = Path(source).name if source != 'unknown' else 'unknown'
+                        if filename != 'unknown':
+                            indexed_files.add(filename)
+                    
+                    print(f"📂 Indexed files: {len(indexed_files)}")
+                    
+                    if len(indexed_files) < source_count:
+                        print(f"   ⚠️  {source_count - len(indexed_files)} files not indexed")
+                        print(f"   Run 'pcie-debug vectordb build --force' to rebuild")
+                    else:
+                        print(f"   ✅ All source files indexed")
+            except:
+                pass
+        
+        print("=" * 50)
     
     def _get_content_focus(self, filename):
         """Determine content focus based on filename"""
