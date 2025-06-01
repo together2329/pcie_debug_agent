@@ -1302,7 +1302,7 @@ Please provide a comprehensive analysis."""
                 
                 # Generate answer using the model with retrieved context
                 context_text = "\n\n".join([
-                    f"Source {i+1}:\n{result.content[:500]}..."
+                    f"Source {i+1}:\n{(result['content'] if isinstance(result, dict) else result.content)[:500]}..."
                     for i, result in enumerate(sources[:3])
                 ])
                 
@@ -1327,7 +1327,8 @@ Be concise but thorough in your technical analysis."""
                 """Calculate confidence based on search scores"""
                 if not sources:
                     return 0.0
-                avg_score = sum(s.combined_score for s in sources) / len(sources)
+                # Sources are dictionaries with 'score' key, not objects with combined_score attribute
+                avg_score = sum(s['score'] if isinstance(s, dict) else s.combined_score for s in sources) / len(sources)
                 return min(avg_score, 1.0)  # Cap at 1.0
             
             def _generate_answer_with_model(self, prompt):
