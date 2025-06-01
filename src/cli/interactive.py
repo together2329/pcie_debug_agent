@@ -15,6 +15,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 
 from src.models.model_selector import get_model_selector
+from src.models.embedding_selector import get_embedding_selector
 from src.vectorstore.faiss_store import FAISSVectorStore
 from src.rag.enhanced_rag_engine import EnhancedRAGEngine
 from src.config.settings import load_settings
@@ -54,6 +55,7 @@ Type your PCIe questions directly or use slash commands.
         self.memory_manager = MemoryManager()
         self.session_manager = SessionManager()
         self.token_counter = TokenCounter()
+        self.embedding_selector = get_embedding_selector()
         
         # RAG components
         self.vector_store = None
@@ -98,11 +100,10 @@ Type your PCIe questions directly or use slash commands.
             import numpy as np
             
             class ModelWrapper:
-                def __init__(self, selector, rag_enabled=False):
+                def __init__(self, selector, embedding_selector, rag_enabled=False):
                     self.selector = selector
+                    self.embedding_selector = embedding_selector
                     self.rag_enabled = rag_enabled
-                    if rag_enabled:
-                        self.embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
                 
                 def generate_completion(self, prompt: str, **kwargs) -> str:
                     # Filter out parameters that LocalLLMProvider doesn't support
@@ -114,19 +115,19 @@ Type your PCIe questions directly or use slash commands.
                     """Generate embeddings for texts"""
                     if not self.rag_enabled:
                         raise RuntimeError("RAG not enabled - no vector database")
-                    embeddings = self.embedding_model.encode(texts)
-                    return np.array(embeddings)
+                    provider = self.embedding_selector.get_current_provider()
+                    return provider.encode(texts)
             
             # Initialize RAG engine only if vector store is available
             if self.rag_enabled and self.vector_store:
                 self.rag_engine = EnhancedRAGEngine(
                     vector_store=self.vector_store,
-                    model_manager=ModelWrapper(self.model_selector, rag_enabled=True)
+                    model_manager=ModelWrapper(self.model_selector, self.embedding_selector, rag_enabled=True)
                 )
             else:
                 # Use direct model without RAG
                 self.rag_engine = None
-                self.model_wrapper = ModelWrapper(self.model_selector, rag_enabled=False)
+                self.model_wrapper = ModelWrapper(self.model_selector, self.embedding_selector, rag_enabled=False)
             
             if self.verbose:
                 print("✅ System ready!")
@@ -148,6 +149,7 @@ Type your PCIe questions directly or use slash commands.
 Available Commands:
   help                 Show this help
   /model [model-id]    List or switch AI models
+  /rag_model [model]   List or switch RAG embedding models
   /memory              Manage persistent memory
   /session             Manage conversation sessions
   /clear               Clear current conversation
@@ -308,8 +310,9 @@ Examples:
    Status: {rag_status}
    Vector Database: {'Loaded' if self.vector_store else 'Not Loaded'}
    Documents Indexed: {doc_count:,}
-   Embedding Model: {'sentence-transformers/all-MiniLM-L6-v2' if self.rag_enabled else 'N/A'}
-   Embedding Dimension: {'384' if self.rag_enabled else 'N/A'}
+   Embedding Model: {self.embedding_selector.get_current_model()}
+   Embedding Dimension: {self.embedding_selector.get_current_provider().get_dimension() if self.embedding_selector.get_current_provider() else 'N/A'}
+   Embedding Provider: {self.embedding_selector.get_model_info().get('provider', 'N/A')}
    
 💬 Session Information:
    Current Turn: {self.turn_count}/{self.max_turns}
@@ -479,9 +482,9 @@ Please provide a comprehensive analysis."""
                         from sentence_transformers import SentenceTransformer
                         
                         class ModelWrapper:
-                            def __init__(self, selector):
+                            def __init__(self, selector, embedding_selector):
                                 self.selector = selector
-                                self.embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+                                self.embedding_selector = embedding_selector
                             
                             def generate_completion(self, prompt: str, **kwargs) -> str:
                                 filtered_kwargs = {k: v for k, v in kwargs.items() 
@@ -489,12 +492,12 @@ Please provide a comprehensive analysis."""
                                 return self.selector.generate_completion(prompt, **filtered_kwargs)
                             
                             def generate_embeddings(self, texts: List[str]) -> np.ndarray:
-                                embeddings = self.embedding_model.encode(texts)
-                                return np.array(embeddings)
+                                provider = self.embedding_selector.get_current_provider()
+                                return provider.encode(texts)
                         
                         self.rag_engine = EnhancedRAGEngine(
                             vector_store=self.vector_store,
-                            model_manager=ModelWrapper(self.model_selector)
+                            model_manager=ModelWrapper(self.model_selector, self.embedding_selector)
                         )
                         
                         print_success("✅ RAG enabled successfully!")
@@ -530,12 +533,70 @@ Please provide a comprehensive analysis."""
                                          if k not in ['provider', 'model']}
                         return self.selector.generate_completion(prompt, **filtered_kwargs)
                 
-                self.model_wrapper = ModelWrapper(self.model_selector, rag_enabled=False)
+                self.model_wrapper = ModelWrapper(self.model_selector, self.embedding_selector, rag_enabled=False)
             
             print_success("✅ RAG disabled")
             print_info("   Queries will be sent directly to LLM without context retrieval")
         else:
             print_error("❌ Invalid option. Use: /rag on|off")
+    
+    def do_rag_model(self, arg):
+        """List or switch RAG embedding models"""
+        if not arg:
+            # List available embedding models
+            current = self.embedding_selector.get_current_model()
+            models = self.embedding_selector.list_models()
+            
+            print("\n🧮 Available Embedding Models:")
+            print("-" * 70)
+            
+            for model_id, config in models.items():
+                marker = "✓" if model_id == current else " "
+                available = "✅" if self.embedding_selector.is_available(model_id) else "❌"
+                provider_type = "API" if config["cost"] != "free" else "Local"
+                
+                print(f"  {marker} {model_id:<25} {available} - {config['description']}")
+                print(f"    {' '*27} {provider_type} | {config['speed']} | {config['cost']}")
+            
+            print(f"\nCurrent: {current}")
+            print("Use '/rag_model <name>' to switch")
+            return
+        
+        # Switch embedding model
+        if not self.embedding_selector.is_available(arg):
+            if arg in self.embedding_selector.list_models():
+                model_config = self.embedding_selector.list_models()[arg]
+                if model_config["provider"].__name__ == "OpenAIEmbeddingProvider":
+                    print_error(f"❌ Model '{arg}' requires OpenAI API key")
+                    print_info("   Set OPENAI_API_KEY environment variable")
+                else:
+                    print_error(f"❌ Model '{arg}' is not available")
+            else:
+                print_error(f"❌ Unknown embedding model: {arg}")
+                print_info("   Use '/rag_model' to see available models")
+            return
+        
+        if self.embedding_selector.switch_model(arg):
+            print_success(f"✅ Switched to embedding model: {arg}")
+            
+            # Get model info
+            info = self.embedding_selector.get_model_info(arg)
+            print_info(f"   Dimension: {info['dimension']}")
+            print_info(f"   Provider: {info.get('provider', 'unknown')}")
+            print_info(f"   Cost: {info['cost']}")
+            
+            # If RAG is enabled, warn about rebuilding vector store
+            if self.rag_enabled:
+                print_warning("⚠️  Embedding model changed!")
+                print_info("   Vector database may need rebuilding for optimal performance")
+                print_info("   Run 'pcie-debug vectordb build --force' to rebuild with new embeddings")
+                
+                # Disable RAG temporarily to avoid dimension mismatch
+                self.rag_enabled = False
+                print_info("   RAG temporarily disabled to prevent errors")
+                print_info("   Re-enable with '/rag on' after rebuilding vector database")
+        else:
+            print_error(f"❌ Failed to switch to {arg}")
     
     def do_tokens(self, arg):
         """Show detailed token usage information"""
@@ -676,12 +737,12 @@ Please provide a comprehensive analysis."""
                 
                 if self.analysis_verbose:
                     # Show embedding details
-                    from sentence_transformers import SentenceTransformer
-                    embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
-                    query_embedding = embedding_model.encode(query)
+                    current_embedding_provider = self.embedding_selector.get_current_provider()
+                    query_embedding = current_embedding_provider.encode([query])[0]
                     embedding_time = time.time() - embedding_start
                     
-                    print(f"     ✓ Embedding model: sentence-transformers/all-MiniLM-L6-v2")
+                    current_embedding_model = self.embedding_selector.get_current_model()
+                    print(f"     ✓ Embedding model: {current_embedding_model}")
                     print(f"     ✓ Embedding dimension: {len(query_embedding)}")
                     print(f"     ✓ Embedding time: {embedding_time:.3f}s")
                     print(f"     ✓ Embedding norm: {np.linalg.norm(query_embedding):.4f}")
@@ -812,9 +873,12 @@ Be concise but thorough in your technical analysis."""
                             print("=" * 80)
                             
                         # Show embedding statistics
+                        embedding_info = self.embedding_selector.get_model_info()
                         print(f"\n🧮 Embedding Statistics:")
-                        print(f"   • Model: sentence-transformers/all-MiniLM-L6-v2")
-                        print(f"   • Dimension: 384")
+                        print(f"   • Model: {embedding_info.get('model', 'N/A')}")
+                        print(f"   • Provider: {embedding_info.get('provider', 'N/A')}")
+                        print(f"   • Dimension: {embedding_info.get('dimension', 'N/A')}")
+                        print(f"   • Cost: {embedding_info.get('cost', 'N/A')}")
                         print(f"   • Similarity metric: Cosine")
                         print(f"   • Index type: FAISS IndexFlatIP")
                     else:

@@ -12,6 +12,7 @@ import shutil
 from src.processors.document_chunker import DocumentChunker
 from src.vectorstore.faiss_store import FAISSVectorStore
 from src.config.settings import load_settings
+from src.models.embedding_selector import get_embedding_selector
 from src.cli.utils.output import print_success, print_error, print_info, print_warning
 
 
@@ -112,14 +113,20 @@ def build_vectordb(input_dir: str, output_dir: str, force: bool, chunk_size: int
         
         output_path.mkdir(parents=True, exist_ok=True)
         
-        store = FAISSVectorStore(
-            index_path=str(output_path),
-            dimension=384  # for sentence-transformers/all-MiniLM-L6-v2
-        )
+        # Get current embedding model
+        embedding_selector = get_embedding_selector()
+        embedding_provider = embedding_selector.get_current_provider()
+        embedding_info = embedding_selector.get_model_info()
         
-        # Initialize embedding model
-        from sentence_transformers import SentenceTransformer
-        embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+        print_info(f"Using embedding model: {embedding_info['model']}")
+        print_info(f"Provider: {embedding_info['provider']}")
+        print_info(f"Dimension: {embedding_info['dimension']}")
+        
+        # Create vector store with correct dimension
+        store = FAISSVectorStore(
+            dimension=embedding_info['dimension'],
+            index_path=str(output_path)
+        )
         
         # Add documents in batches
         batch_size = 100
@@ -130,8 +137,8 @@ def build_vectordb(input_dir: str, output_dir: str, force: bool, chunk_size: int
             texts = [doc['content'] for doc in batch]
             metadatas = [{'source': doc.get('source', 'unknown')} for doc in batch]
             
-            # Generate embeddings
-            embeddings = embedding_model.encode(texts)
+            # Generate embeddings using selected model
+            embeddings = embedding_provider.encode(texts)
             
             store.add_documents(embeddings, texts, metadatas)
             print(" ✓")
@@ -234,10 +241,10 @@ def search(query: str, path: str, top_k: int):
         print_info(f"🔍 Searching for: '{query}'")
         print("-" * 50)
         
-        # Generate embedding for query
-        from sentence_transformers import SentenceTransformer
-        embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
-        query_embedding = embedding_model.encode(query)
+        # Generate embedding for query using current model
+        embedding_selector = get_embedding_selector()
+        embedding_provider = embedding_selector.get_current_provider()
+        query_embedding = embedding_provider.encode([query])[0]
         
         # Search
         results = store.search(query_embedding, k=top_k)
