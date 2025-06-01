@@ -66,6 +66,10 @@ Type your PCIe questions directly or use slash commands.
         self.conversation_history = []
         self.session_tokens = {"input": 0, "output": 0}  # Track tokens per session
         
+        # Streaming configuration
+        self.streaming_enabled = True  # Enable streaming by default
+        self.stream_delay = 0.01  # Small delay between chunks for better visual effect
+        
         # Initialize system
         self._initialize_system()
     
@@ -202,6 +206,7 @@ Available Commands:
   /rag_status          Show detailed RAG and vector DB status
   /knowledge_base      Show RAG knowledge base content and status
   /kb                  Alias for /knowledge_base
+  /stream [on/off]     Toggle real-time streaming responses
   /vim                 Enable vim mode
   /exit, /quit         Exit the shell
 
@@ -369,6 +374,8 @@ Examples:
    
 ⚙️  Settings:
    Verbose Analysis: {verbose_status}
+   Streaming Responses: {'ON' if self.streaming_enabled else 'OFF'}
+   Stream Delay: {self.stream_delay}s
    Auto-save Sessions: {'Yes' if hasattr(self, 'auto_save') and self.auto_save else 'No'}
    
 📊 Performance:
@@ -581,8 +588,9 @@ Please provide a comprehensive analysis."""
                 from sentence_transformers import SentenceTransformer
                 
                 class ModelWrapper:
-                    def __init__(self, selector, rag_enabled=False):
+                    def __init__(self, selector, embedding_selector, rag_enabled=False):
                         self.selector = selector
+                        self.embedding_selector = embedding_selector
                         self.rag_enabled = rag_enabled
                     
                     def generate_completion(self, prompt: str, **kwargs) -> str:
@@ -670,6 +678,94 @@ Please provide a comprehensive analysis."""
             print(f"   • Use '/verbose on' to see detailed analysis steps")
         
         print("="*60)
+    
+    def _generate_streaming_response(self, prompt: str) -> str:
+        """Generate streaming response and display in real-time"""
+        import sys
+        import time
+        
+        print("\n💡 Response:")
+        print("-" * 60)
+        
+        response_parts = []
+        
+        try:
+            # Generate streaming completion
+            for chunk in self.model_selector.generate_completion_stream(prompt):
+                if chunk:
+                    print(chunk, end='', flush=True)
+                    response_parts.append(chunk)
+                    # Small delay for better visual effect
+                    if self.stream_delay > 0:
+                        time.sleep(self.stream_delay)
+        except Exception as e:
+            print(f"\n❌ Streaming error: {e}")
+            # Fallback to non-streaming
+            return self.model_wrapper.generate_completion(prompt)
+        
+        print()  # New line after streaming
+        print("-" * 60)
+        
+        return "".join(response_parts)
+    
+    def _display_source_files(self, sources):
+        """Display source files used in RAG retrieval"""
+        from pathlib import Path
+        
+        # Extract unique file paths
+        file_paths = set()
+        file_chunks = {}
+        
+        for source in sources:
+            metadata = source.get('metadata', {})
+            source_path = metadata.get('source', 'Unknown')
+            
+            if source_path != 'Unknown':
+                file_paths.add(source_path)
+                filename = Path(source_path).name
+                if filename not in file_chunks:
+                    file_chunks[filename] = []
+                file_chunks[filename].append({
+                    'score': source.get('score', 0.0),
+                    'content_length': len(source.get('content', ''))
+                })
+        
+        if file_paths:
+            print(f"\n📁 Knowledge Base Files Used ({len(file_paths)} files):")
+            print("-" * 60)
+            
+            # Sort files by highest relevance score
+            sorted_files = []
+            for filename, chunks in file_chunks.items():
+                max_score = max(chunk['score'] for chunk in chunks)
+                total_content = sum(chunk['content_length'] for chunk in chunks)
+                sorted_files.append((filename, len(chunks), max_score, total_content))
+            
+            sorted_files.sort(key=lambda x: x[2], reverse=True)  # Sort by max score
+            
+            for filename, chunk_count, max_score, total_content in sorted_files:
+                # Get file description
+                file_description = self._get_file_description(filename)
+                
+                print(f"  📄 {filename}")
+                print(f"     └─ {file_description}")
+                print(f"     └─ {chunk_count} chunk{'s' if chunk_count > 1 else ''} used, "
+                      f"max relevance: {max_score:.3f}, {total_content} chars")
+            
+            print("-" * 60)
+    
+    def _get_file_description(self, filename):
+        """Get description of knowledge base file"""
+        descriptions = {
+            "aer_error_handling.md": "Advanced Error Reporting configuration and monitoring",
+            "power_management_issues.md": "PCIe power states and ASPM troubleshooting", 
+            "pcie_error_scenarios.md": "Common PCIe error scenarios and solutions",
+            "ltssm_states_guide.md": "Link Training State Machine states and transitions",
+            "tlp_error_analysis.md": "Transaction Layer Packet analysis and debugging",
+            "signal_integrity_troubleshooting.md": "Signal integrity issues and physical layer debugging"
+        }
+        
+        return descriptions.get(filename, "PCIe technical documentation")
     
     def do_knowledge_base(self, arg):
         """Show current RAG knowledge base content and status"""
@@ -962,6 +1058,29 @@ Please provide a comprehensive analysis."""
         else:
             print_error("❌ Invalid option. Use: /verbose on|off")
     
+    def do_stream(self, arg):
+        """Toggle real-time streaming responses"""
+        if not arg:
+            # Show current status
+            status = "ON" if self.streaming_enabled else "OFF"
+            print(f"\n🌊 Streaming Mode: {status}")
+            print("\nStreaming mode shows LLM responses in real-time:")
+            print("  ⚡ Text appears as it's generated")
+            print("  👁️  Better user experience and feedback")
+            print("  ⏱️  See progress without waiting")
+            print(f"  🔧 Stream delay: {self.stream_delay}s between chunks")
+            print("\nUsage: /stream on|off")
+        elif arg.lower() in ["on", "true", "1", "yes"]:
+            self.streaming_enabled = True
+            print_success("✅ Real-time streaming enabled")
+            print("   🌊 LLM responses will appear in real-time")
+        elif arg.lower() in ["off", "false", "0", "no"]:
+            self.streaming_enabled = False
+            print_success("✅ Real-time streaming disabled")
+            print("   📄 LLM responses will appear all at once")
+        else:
+            print_error("❌ Invalid option. Use: /stream on|off")
+    
     def do_vim(self, arg):
         """Enable vim mode for input editing"""
         try:
@@ -1027,10 +1146,14 @@ Please provide a comprehensive analysis."""
             output_tokens = 0
             
             if self.rag_enabled and self.rag_engine:
-                # Use RAG pipeline
+                # Use RAG pipeline (streaming not yet supported with RAG)
+                original_streaming = self.streaming_enabled
+                self.streaming_enabled = False  # Temporarily disable streaming for RAG
                 if self.analysis_verbose:
                     print(f"\n📝 Query: '{query}'")
                     print(f"   Length: {len(query)} characters")
+                    if original_streaming:
+                        print("   ℹ️  Streaming temporarily disabled for RAG pipeline")
                     print("\n🔧 Analysis Pipeline (RAG ENABLED):")
                     print("\n  1️⃣ Generating embeddings for query...")
                     embedding_start = time.time()
@@ -1077,6 +1200,10 @@ Please provide a comprehensive analysis."""
                     sources = getattr(result, 'sources', [])
                     confidence = getattr(result, 'confidence', None)
                     
+                    # Show source files used
+                    if sources:
+                        self._display_source_files(sources)
+                    
                     # Estimate tokens for RAG (prompt includes context)
                     context_text = "\n".join([s.get('content', '')[:500] for s in sources[:5]])
                     full_prompt = f"{query}\n\nContext:\n{context_text}"
@@ -1116,7 +1243,10 @@ Be concise but thorough in your technical analysis."""
                 if self.analysis_verbose:
                     llm_start = time.time()
                 
-                response = self.model_wrapper.generate_completion(prompt)
+                if self.streaming_enabled:
+                    response = self._generate_streaming_response(prompt)
+                else:
+                    response = self.model_wrapper.generate_completion(prompt)
                 sources = []
                 confidence = None
                 
@@ -1127,12 +1257,18 @@ Be concise but thorough in your technical analysis."""
                 
                 # Count output tokens
                 output_tokens = self.token_counter.count_tokens(response, model_name)
+                
+                # Restore original streaming setting if it was defined
+                if 'original_streaming' in locals():
+                    self.streaming_enabled = original_streaming
             
             if response and response != "No response generated":
-                print("\n💡 Response:")
-                print("-" * 60)
-                print(response)
-                print("-" * 60)
+                if not self.streaming_enabled:
+                    # Non-streaming mode: print all at once
+                    print("\n💡 Response:")
+                    print("-" * 60)
+                    print(response)
+                    print("-" * 60)
                 
                 if self.analysis_verbose:
                     print(f"\n📊 Analysis Details:")
@@ -1154,6 +1290,7 @@ Be concise but thorough in your technical analysis."""
                         
                         # Show detailed source information
                         if result.sources and len(result.sources) > 0:
+                            from pathlib import Path
                             print(f"\n📖 Source Documents (Top {min(5, len(result.sources))}):")
                             print("=" * 80)
                             for i, source in enumerate(result.sources[:5], 1):  # Show top 5 sources
@@ -1161,13 +1298,20 @@ Be concise but thorough in your technical analysis."""
                                 content = source.get('content', '')
                                 score = source.get('score', 0.0)
                                 
+                                source_path = source_info.get('source', 'Unknown')
+                                filename = Path(source_path).name if source_path != 'Unknown' else 'Unknown'
+                                file_description = self._get_file_description(filename)
+                                
                                 print(f"\n  [{i}] Relevance Score: {score:.4f}")
-                                print(f"      Source: {source_info.get('source', 'Unknown')}")
+                                print(f"      📄 File: {filename}")
+                                print(f"      📝 Description: {file_description}")
+                                if source_path != 'Unknown':
+                                    print(f"      🗂️  Full Path: {source_path}")
                                 if 'chunk_id' in source_info:
-                                    print(f"      Chunk ID: {source_info['chunk_id']}")
+                                    print(f"      🔗 Chunk ID: {source_info['chunk_id']}")
                                 if 'page' in source_info:
-                                    print(f"      Page: {source_info['page']}")
-                                print(f"      Content ({len(content)} chars):")
+                                    print(f"      📄 Page: {source_info['page']}")
+                                print(f"      📊 Content ({len(content)} chars):")
                                 # Show more content in verbose mode
                                 preview_length = 300
                                 if len(content) > preview_length:
