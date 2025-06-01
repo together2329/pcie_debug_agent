@@ -1,8 +1,92 @@
 #!/usr/bin/env python3
-"""PCIe Debug Agent CLI entry point"""
+"""
+PCIe Debug Agent - Enhanced CLI
+Main entry point with interactive mode and all features
+"""
 
 import sys
-from src.cli.main import main
+import os
+import argparse
+from pathlib import Path
+
+# Add the project root to Python path
+project_root = Path(__file__).parent
+sys.path.insert(0, str(project_root))
+
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # dotenv not available
+
+# Suppress warnings
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["GGML_METAL_LOG_LEVEL"] = "0"
+
+def main():
+    """Main entry point with enhanced features"""
+    parser = argparse.ArgumentParser(
+        description="PCIe Debug Agent - AI-powered PCIe debugging assistant",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Interactive mode (default)
+  ./pcie-debug
+  
+  # One-shot query
+  ./pcie-debug -p "What causes PCIe completion timeout?"
+  
+  # Analyze a log file
+  ./pcie-debug analyze logs/pcie_error.log
+  
+  # Use specific model
+  ./pcie-debug --model llama-3.2-3b
+  
+  # Show available models
+  ./pcie-debug model list
+"""
+    )
+    
+    # Add arguments
+    parser.add_argument("-p", "--prompt", help="One-shot prompt (non-interactive)")
+    parser.add_argument("--model", help="Model to use (default: llama-3.2-3b)")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
+    parser.add_argument("--analysis-verbose", action="store_true", help="Verbose analysis mode")
+    parser.add_argument("--max-turns", type=int, default=50, help="Max conversation turns")
+    parser.add_argument("--continue", dest="continue_session", action="store_true",
+                       help="Continue previous session")
+    
+    # Subcommands (if any command args provided, use regular CLI)
+    parser.add_argument("command", nargs="?", help="Command to run")
+    parser.add_argument("args", nargs="*", help="Command arguments")
+    
+    args = parser.parse_args()
+    
+    # If command provided, use regular CLI
+    if args.command:
+        from src.cli.main import main as cli_main
+        # Reconstruct sys.argv for click
+        sys.argv = [sys.argv[0], args.command] + args.args
+        cli_main()
+    
+    # If prompt provided, process one-shot
+    elif args.prompt:
+        from src.cli.interactive import PCIeDebugShell
+        shell = PCIeDebugShell(model_id=args.model, verbose=args.verbose)
+        shell.analysis_verbose = args.analysis_verbose
+        shell.onecmd(args.prompt)
+    
+    # Otherwise, interactive mode
+    else:
+        from src.cli.interactive import start_interactive_mode
+        start_interactive_mode(
+            model_id=args.model,
+            verbose=args.verbose,
+            max_turns=args.max_turns,
+            continue_session=args.continue_session,
+            analysis_verbose=args.analysis_verbose
+        )
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

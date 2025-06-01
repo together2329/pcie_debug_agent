@@ -127,10 +127,10 @@ class EnhancedRAGEngine:
                 llm_response = self._call_llm(prompt)
                 answer, reasoning = self._parse_llm_response(llm_response)
             except Exception as e:
-                # LLM이 사용할 수 없는 경우 검색된 문서만으로 응답 생성
-                logger.warning(f"LLM 호출 실패, 검색 결과만 제공: {e}")
+                # Fall back to search results only when LLM is unavailable
+                logger.warning(f"LLM call failed, providing search results only: {e}")
                 answer = self._create_fallback_answer(rag_query.query, retrieved_docs)
-                reasoning = "LLM을 사용할 수 없어 검색된 문서 내용만 제공됩니다."
+                reasoning = "LLM unavailable - providing search results from knowledge base only."
             
             # 7. 신뢰도 계산
             confidence = self._calculate_confidence(retrieved_docs, answer)
@@ -295,18 +295,36 @@ class EnhancedRAGEngine:
         return answer, reasoning
     
     def _create_fallback_answer(self, query: str, documents: List[Dict[str, Any]]) -> str:
-        """LLM 없이 검색 결과만으로 답변 생성"""
+        """Create fallback answer when LLM is unavailable"""
         if not documents:
-            return f"질문 '{query}'에 대한 관련 정보를 찾을 수 없습니다."
+            return f"No relevant information found for query: '{query}'. Please check your question or try different keywords."
         
-        answer = f"질문 '{query}'에 대한 검색 결과:\n\n"
+        # Remove duplicates based on content
+        unique_docs = []
+        seen_content = set()
+        for doc in documents:
+            content = doc.get('content', '')[:100]  # First 100 chars for comparison
+            if content not in seen_content:
+                unique_docs.append(doc)
+                seen_content.add(content)
         
-        for i, doc in enumerate(documents[:3], 1):  # 상위 3개만 표시
+        answer = f"Search results for: '{query}'\n\n"
+        answer += "Based on the PCIe knowledge base, here are the most relevant findings:\n\n"
+        
+        for i, doc in enumerate(unique_docs[:3], 1):  # Top 3 unique results
             content = doc.get('content', '')
             score = doc.get('score', 0.0)
-            answer += f"{i}. (유사도: {score:.3f})\n{content[:200]}...\n\n"
+            source = doc.get('source', 'Unknown source')
+            
+            answer += f"{i}. **Relevance: {score:.1%}**\n"
+            answer += f"   Source: {source}\n"
+            answer += f"   Content: {content[:300]}...\n\n"
         
-        answer += "더 정확한 분석을 위해서는 LLM API 키를 설정해주세요."
+        answer += "💡 **Recommendation**: For detailed analysis and solutions, please:\n"
+        answer += "- Set up a local model (download required model files), or\n"
+        answer += "- Configure API keys for cloud models (OpenAI/Anthropic)\n"
+        answer += "- Use '/model list' to see available options"
+        
         return answer
 
     def _calculate_confidence(self, documents: List[Dict[str, Any]], answer: str) -> float:

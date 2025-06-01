@@ -30,11 +30,18 @@ class LocalLLMProvider:
             "size_gb": 1.8,
             "context_length": 131072,
             "description": "Llama 3.2 3B Instruct model optimized for M1 with Q4_K_M quantization"
+        },
+        "llama-3.2-3b": {
+            "url": "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+            "filename": "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+            "size_gb": 1.8,
+            "context_length": 131072,
+            "description": "Llama 3.2 3B Instruct model optimized for M1 with Q4_K_M quantization"
         }
     }
     
     def __init__(self, 
-                 model_name: str = "llama-3.2-3b-instruct",
+                 model_name: str = "llama-3.2-3b",
                  models_dir: str = "models",
                  n_ctx: int = 8192,
                  n_gpu_layers: int = -1,  # Use all GPU layers on M1
@@ -224,7 +231,8 @@ class LocalLLMProvider:
             Formatted prompt with proper instruction tags
         """
         # Llama 3.2 Instruct format
-        formatted = f"""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+        # Note: llama-cpp-python automatically adds <|begin_of_text|>, so we don't include it
+        formatted = f"""<|start_header_id|>system<|end_header_id|>
 
 You are a helpful AI assistant specialized in PCIe debugging and analysis. Provide clear, accurate, and technical responses based on the given context.<|eot_id|><|start_header_id|>user<|end_header_id|>
 
@@ -328,3 +336,15 @@ You are a helpful AI assistant specialized in PCIe debugging and analysis. Provi
         system_info["sufficient_memory"] = system_info["available_memory_gb"] > min_memory_gb * 1.2
         
         return system_info
+    
+    def get_info(self) -> dict:
+        """Get provider information"""
+        return {
+            "name": "Local LLM Provider",
+            "model": self.model_name,
+            "type": "local",
+            "status": "ready" if self.llm else "not_loaded",
+            "description": f"Local {self.model_name} model",
+            "context_size": self.n_ctx,
+            "model_path": str(self.model_path) if hasattr(self, 'model_path') else "unknown"
+        }
