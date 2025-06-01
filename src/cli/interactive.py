@@ -75,25 +75,37 @@ Type your PCIe questions directly or use slash commands.
             if self.verbose:
                 print("🔧 Initializing PCIe Debug Agent...")
             
-            # Try to load vector store (optional)
-            vector_db_path = Path("data/vectorstore")
+            # Initialize multi-model vector database manager
+            from src.vectorstore.multi_model_manager import MultiModelVectorManager
+            self.vector_manager = MultiModelVectorManager()
+            
+            # Try to load vector store for current embedding model
+            current_model = self.embedding_selector.get_current_model()
             self.vector_store = None
             self.rag_enabled = False
             
-            if vector_db_path.exists():
-                try:
-                    # Use the load class method to load existing store
-                    self.vector_store = FAISSVectorStore.load(str(vector_db_path))
-                    self.rag_enabled = True
-                    
-                    if self.verbose:
-                        print(f"   Vector store: {self.vector_store.index.ntotal} documents")
-                except Exception as e:
-                    print_warning(f"⚠️ Vector database found but couldn't load: {e}")
-                    print_info("   Continuing without RAG support")
+            # Check if we need to migrate legacy database
+            legacy_path = Path("data/vectorstore/index.faiss")
+            if legacy_path.exists() and not any(self.vector_manager.list_models().values()):
+                if self.verbose:
+                    print("🔄 Migrating legacy vector database...")
+                self.vector_manager.migrate_legacy()
+            
+            # Try to load vector store for current model
+            self.vector_store = self.vector_manager.load(current_model)
+            if self.vector_store:
+                self.rag_enabled = True
+                if self.verbose:
+                    print(f"   Vector store ({current_model}): {self.vector_store.index.ntotal} documents")
             else:
-                print_info("ℹ️ No vector database found. RAG features disabled.")
-                print_info("   Run 'pcie-debug vectordb build' to enable semantic search")
+                if self.verbose:
+                    available_models = [name for name, info in self.vector_manager.list_models().items() if info['exists']]
+                    if available_models:
+                        print_info(f"ℹ️ No vector database for {current_model}. Available: {', '.join(available_models)}")
+                        print_info("   Use '/rag_model <model>' to switch or build database for current model")
+                    else:
+                        print_info("ℹ️ No vector databases found. RAG features disabled.")
+                        print_info("   Run 'pcie-debug vectordb build' to enable semantic search")
             
             # Create model wrapper
             from sentence_transformers import SentenceTransformer
@@ -661,88 +673,87 @@ Please provide a comprehensive analysis."""
     
     def do_knowledge_base(self, arg):
         """Show current RAG knowledge base content and status"""
-        print(f"\n📚 RAG Knowledge Base Status")
+        print(f"\n📚 Multi-Model RAG Knowledge Base Status")
         print("="*80)
         
-        # Check if vector database exists
-        vector_db_path = Path("data/vectorstore")
-        if not vector_db_path.exists():
-            print_error("❌ Vector database not found")
-            print_info("   Run 'pcie-debug vectordb build' to create knowledge base")
-            print("="*80)
-            return
+        # Get current embedding model info
+        current_embedding = self.embedding_selector.get_current_model()
+        embedding_info = self.embedding_selector.get_model_info()
         
-        try:
-            # Load vector store and get statistics
-            from src.vectorstore.faiss_store import FAISSVectorStore
-            store = FAISSVectorStore.load(str(vector_db_path))
+        print(f"\n🎯 Current Configuration:")
+        print(f"   Active Model: {current_embedding}")
+        print(f"   Provider: {embedding_info.get('provider', 'unknown')}")
+        print(f"   Dimension: {embedding_info.get('dimension', 'unknown')}D")
+        print(f"   RAG Status: {'✅ ENABLED' if self.rag_enabled else '❌ DISABLED'}")
+        
+        # List all available vector databases
+        models_info = self.vector_manager.list_models()
+        available_models = {name: info for name, info in models_info.items() if info['exists']}
+        
+        if available_models:
+            print(f"\n🗄️ Available Vector Databases ({len(available_models)} models):")
+            print("-" * 80)
             
-            print(f"\n🔧 Database Technical Details:")
-            print(f"   Location: {vector_db_path}")
-            print(f"   Total chunks: {store.index.ntotal}")
-            print(f"   Dimensions: {store.dimension}D vectors")
-            print(f"   Storage type: FAISS IndexFlatIP (cosine similarity)")
+            for model_name, info in available_models.items():
+                # Load stats for this model
+                stats = self.vector_manager.get_stats(model_name)
+                if stats:
+                    is_current = "👉 " if model_name == current_embedding else "   "
+                    status = "✅ ACTIVE" if (model_name == current_embedding and self.rag_enabled) else "⚪ READY"
+                    
+                    print(f"{is_current}📊 {model_name}")
+                    print(f"      Status: {status}")
+                    print(f"      Vectors: {stats['total_vectors']:,}")
+                    print(f"      Dimension: {stats['dimension']}D")
+                    print(f"      Size: {stats['size_mb']:.1f}MB")
+                    print(f"      Path: {Path(stats['path']).name}")
+                    print()
             
-            # Get embedding model info
-            embedding_info = self.embedding_selector.get_model_info()
-            current_embedding = self.embedding_selector.get_current_model()
-            embedding_dim = self.embedding_selector.get_current_provider().get_dimension()
-            
-            print(f"   Embedding model: {current_embedding}")
-            print(f"   Provider: {embedding_info.get('provider', 'unknown')}")
-            
-            # Check compatibility
-            if embedding_dim == store.dimension:
-                print(f"   Compatibility: ✅ COMPATIBLE ({embedding_dim}D)")
-            else:
-                print(f"   Compatibility: ❌ MISMATCH (DB: {store.dimension}D, Model: {embedding_dim}D)")
-            
-            # Analyze document sources from metadata
-            if hasattr(store, 'metadata') and store.metadata:
-                sources = {}
-                for meta in store.metadata:
-                    source = meta.get('source', 'unknown')
-                    # Extract just the filename for cleaner display
-                    filename = Path(source).name if source != 'unknown' else 'unknown'
-                    sources[filename] = sources.get(filename, 0) + 1
-                
-                print(f"\n📖 Knowledge Base Content ({len(sources)} files, {len(store.metadata)} chunks):")
+            # Show detailed content for current model if available
+            if current_embedding in available_models and self.vector_store:
+                print(f"\n📖 Current Model Content ({current_embedding}):")
                 print("-" * 80)
                 
-                # Calculate total file size
-                total_size = 0
-                for filename, chunk_count in sorted(sources.items()):
-                    if filename != 'unknown':
-                        file_path = Path("data/knowledge_base") / filename
-                        if file_path.exists():
-                            size_kb = file_path.stat().st_size / 1024
-                            total_size += size_kb
-                            
-                            # Determine content focus based on filename
-                            content_focus = self._get_content_focus(filename)
-                            
-                            print(f"  📄 {filename:<35} {chunk_count} chunks ({size_kb:.1f}KB)")
-                            print(f"     {' '*37} └─ {content_focus}")
-                        else:
-                            print(f"  📄 {filename:<35} {chunk_count} chunks (file not found)")
-                
-                print(f"\n📊 Knowledge Base Summary:")
-                print(f"   Total files: {len([f for f in sources.keys() if f != 'unknown'])}")
-                print(f"   Total size: {total_size:.1f}KB")
-                print(f"   Chunking strategy: ~1000 words per chunk with 200 word overlap")
-                
-                # Show coverage areas
-                coverage_areas = self._get_coverage_areas(sources.keys())
-                print(f"\n🎯 Coverage Areas:")
-                for area in coverage_areas:
-                    print(f"   • {area}")
-                
-            else:
-                print(f"\n📖 Knowledge Base Content:")
-                print("   No metadata available - unable to show source breakdown")
-            
-        except Exception as e:
-            print_error(f"❌ Error analyzing knowledge base: {e}")
+                # Analyze document sources from metadata
+                if hasattr(self.vector_store, 'metadata') and self.vector_store.metadata:
+                    sources = {}
+                    for meta in self.vector_store.metadata:
+                        source = meta.get('source', 'unknown')
+                        filename = Path(source).name if source != 'unknown' else 'unknown'
+                        sources[filename] = sources.get(filename, 0) + 1
+                    
+                    # Calculate total file size
+                    total_size = 0
+                    for filename, chunk_count in sorted(sources.items()):
+                        if filename != 'unknown':
+                            file_path = Path("data/knowledge_base") / filename
+                            if file_path.exists():
+                                size_kb = file_path.stat().st_size / 1024
+                                total_size += size_kb
+                                content_focus = self._get_content_focus(filename)
+                                print(f"  📄 {filename:<35} {chunk_count} chunks ({size_kb:.1f}KB)")
+                                print(f"     {' '*37} └─ {content_focus}")
+                    
+                    print(f"\n📊 Content Summary:")
+                    print(f"   Total files: {len([f for f in sources.keys() if f != 'unknown'])}")
+                    print(f"   Total chunks: {len(self.vector_store.metadata)}")
+                    print(f"   Total size: {total_size:.1f}KB")
+                    
+                    coverage_areas = self._get_coverage_areas(sources.keys())
+                    print(f"\n🎯 Coverage Areas:")
+                    for area in coverage_areas:
+                        print(f"   • {area}")
+                        
+        else:
+            print(f"\n❌ No vector databases found")
+            print(f"   Run 'pcie-debug vectordb build' to create database for {current_embedding}")
+        
+        # Show management options
+        print(f"\n💡 Management Options:")
+        print(f"   📊 View all databases: /knowledge_base")
+        print(f"   🔄 Switch models: /rag_model <model>")
+        print(f"   🔧 Build database: pcie-debug vectordb build")
+        print(f"   📈 Compare performance: python rag_performance_comparison.py")
         
         print("\n" + "="*80)
     
@@ -844,16 +855,50 @@ Please provide a comprehensive analysis."""
             print_info(f"   Provider: {info.get('provider', 'unknown')}")
             print_info(f"   Cost: {info['cost']}")
             
-            # If RAG is enabled, warn about rebuilding vector store
-            if self.rag_enabled:
-                print_warning("⚠️  Embedding model changed!")
-                print_info("   Vector database may need rebuilding for optimal performance")
-                print_info("   Run 'pcie-debug vectordb build --force' to rebuild with new embeddings")
+            # Try to load vector database for the new model
+            self.vector_store = self.vector_manager.load(arg)
+            if self.vector_store:
+                self.rag_enabled = True
+                print_success(f"✅ Loaded existing vector database for {arg}")
+                print_info(f"   Vector store: {self.vector_store.index.ntotal} documents")
                 
-                # Disable RAG temporarily to avoid dimension mismatch
+                # Re-initialize RAG engine with new vector store
+                from sentence_transformers import SentenceTransformer
+                import numpy as np
+                
+                class ModelWrapper:
+                    def __init__(self, selector, embedding_selector, rag_enabled=False):
+                        self.selector = selector
+                        self.embedding_selector = embedding_selector
+                        self.rag_enabled = rag_enabled
+                    
+                    def generate_completion(self, prompt: str, **kwargs) -> str:
+                        filtered_kwargs = {k: v for k, v in kwargs.items() 
+                                         if k not in ['provider', 'model']}
+                        return self.selector.generate_completion(prompt, **filtered_kwargs)
+                    
+                    def generate_embeddings(self, texts: List[str]) -> np.ndarray:
+                        if not self.rag_enabled:
+                            raise RuntimeError("RAG not enabled - no vector database")
+                        provider = self.embedding_selector.get_current_provider()
+                        return provider.encode(texts)
+                
+                self.rag_engine = EnhancedRAGEngine(
+                    vector_store=self.vector_store,
+                    model_manager=ModelWrapper(self.model_selector, self.embedding_selector, rag_enabled=True)
+                )
+            else:
+                # No vector database for this model
                 self.rag_enabled = False
-                print_info("   RAG temporarily disabled to prevent errors")
-                print_info("   Re-enable with '/rag on' after rebuilding vector database")
+                self.rag_engine = None
+                print_warning(f"⚠️  No vector database found for {arg}")
+                print_info(f"   RAG disabled for this model")
+                print_info(f"   Run 'pcie-debug vectordb build' to create database for {arg}")
+                
+                # Show available models
+                available_models = [name for name, info in self.vector_manager.list_models().items() if info['exists']]
+                if available_models:
+                    print_info(f"   Available databases: {', '.join(available_models)}")
         else:
             print_error(f"❌ Failed to switch to {arg}")
     

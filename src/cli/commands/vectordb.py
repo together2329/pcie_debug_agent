@@ -24,12 +24,66 @@ def vectordb():
 
 @vectordb.command(name="build")
 @click.option('--input-dir', '-i', default='data/knowledge_base', help='Input directory with documents')
-@click.option('--output-dir', '-o', default='data/vectorstore', help='Output directory for vector database')
+@click.option('--model', '-m', help='Embedding model to build for (default: current model)')
 @click.option('--force', '-f', is_flag=True, help='Force rebuild even if database exists')
 @click.option('--chunk-size', default=1000, help='Chunk size for text splitting')
 @click.option('--chunk-overlap', default=200, help='Overlap between chunks')
-def build_vectordb(input_dir: str, output_dir: str, force: bool, chunk_size: int, chunk_overlap: int):
-    """Build vector database from knowledge base documents"""
+def build_vectordb(input_dir: str, model: Optional[str], force: bool, chunk_size: int, chunk_overlap: int):
+    """Build vector database for specific embedding model"""
+    
+    from src.vectorstore.multi_model_manager import MultiModelVectorManager
+    
+    # Initialize multi-model manager
+    manager = MultiModelVectorManager()
+    
+    # Get embedding selector
+    embedding_selector = get_embedding_selector()
+    
+    # Determine target model
+    if model:
+        if not embedding_selector.is_available(model):
+            print_error(f"Model '{model}' is not available")
+            return
+        target_model = model
+    else:
+        target_model = embedding_selector.get_current_model()
+    
+    print_info(f"🔧 Building Vector Database for {target_model}...")
+    
+    # Check if already exists
+    if manager.exists(target_model) and not force:
+        print_warning(f"Vector database for {target_model} already exists")
+        print_info("Use --force to rebuild")
+        
+        # Show current stats
+        stats = manager.get_stats(target_model)
+        if stats:
+            print_info(f"Current database has {stats['total_vectors']:,} vectors ({stats['size_mb']:.1f}MB)")
+        return
+    
+    # Build database using manager
+    success = manager.build(
+        model_name=target_model,
+        input_dir=input_dir,
+        force=force,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap
+    )
+    
+    if success:
+        stats = manager.get_stats(target_model)
+        if stats:
+            print_success(f"✅ Vector database built successfully for {target_model}")
+            print_info(f"   Total vectors: {stats['total_vectors']:,}")
+            print_info(f"   Dimension: {stats['dimension']}D")
+            print_info(f"   Size: {stats['size_mb']:.1f}MB")
+            print_info(f"   Path: {stats['path']}")
+    else:
+        print_error(f"❌ Failed to build vector database for {target_model}")
+
+# Keep the old implementation for backward compatibility
+def build_vectordb_legacy(input_dir: str, output_dir: str, force: bool, chunk_size: int, chunk_overlap: int):
+    """Legacy build function - kept for compatibility"""
     
     input_path = Path(input_dir)
     output_path = Path(output_dir)
