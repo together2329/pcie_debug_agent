@@ -60,6 +60,8 @@ Type your PCIe questions directly or use slash commands.
         # RAG components
         self.vector_store = None
         self.rag_engine = None
+        self.rag_search_mode = 'semantic'  # Default search mode
+        self.hybrid_engine = None  # Will be initialized when needed
         
         # Session state
         self.current_session = None
@@ -203,6 +205,7 @@ Available Commands:
   /config              Show configuration
   /verbose [on/off]    Toggle verbose analysis mode
   /rag [on/off]        Toggle RAG (Retrieval-Augmented Generation)
+  /rag_mode [mode]     Select RAG search mode (semantic/hybrid/keyword)
   /rag_status          Show detailed RAG and vector DB status
   /knowledge_base      Show RAG knowledge base content and status
   /kb                  Alias for /knowledge_base
@@ -355,6 +358,7 @@ Examples:
    
 📚 RAG (Retrieval-Augmented Generation):
    Status: {rag_status}
+   Search Mode: {self.rag_search_mode.upper()}
    Vector Database: {'Loaded' if self.vector_store else 'Not Loaded'}
    Documents Indexed: {doc_count:,}
    Embedding Model: {self.embedding_selector.get_current_model()}
@@ -998,6 +1002,239 @@ Please provide a comprehensive analysis."""
         else:
             print_error(f"❌ Failed to switch to {arg}")
     
+    def do_rag_mode(self, arg):
+        """Select RAG search mode (semantic/hybrid/keyword)"""
+        if not arg:
+            # Show current mode and available options
+            current_mode = getattr(self, 'rag_search_mode', 'semantic')
+            print(f"\n🔍 Current RAG Search Mode: {current_mode.upper()}")
+            print("\nAvailable Search Modes:")
+            print("-" * 50)
+            print("  semantic  - Pure vector/semantic search (default)")
+            print("             • Uses embeddings to find similar concepts")
+            print("             • Best for conceptual queries")
+            print("             • Fast and accurate for topic similarity")
+            print()
+            print("  hybrid    - Combines semantic + keyword search")
+            print("             • Uses both embeddings and BM25 scoring")
+            print("             • Best overall performance")
+            print("             • Balances concept and keyword matching")
+            print()
+            print("  keyword   - Pure BM25 keyword search")
+            print("             • Traditional text matching")
+            print("             • Best for exact term searches")
+            print("             • Good for specific error codes/names")
+            print()
+            print("Usage: /rag_mode <semantic|hybrid|keyword>")
+            return
+        
+        mode = arg.lower()
+        valid_modes = ['semantic', 'hybrid', 'keyword']
+        
+        if mode not in valid_modes:
+            print_error(f"❌ Invalid mode: {mode}")
+            print_info(f"   Valid modes: {', '.join(valid_modes)}")
+            return
+        
+        # Check if RAG is enabled
+        if not self.rag_enabled or not self.vector_store:
+            print_error("❌ RAG is not enabled")
+            print_info("   Enable RAG first with '/rag on'")
+            return
+        
+        # Set the search mode
+        self.rag_search_mode = mode
+        
+        # Initialize hybrid search engine if needed
+        if mode in ['hybrid', 'keyword'] and not hasattr(self, 'hybrid_engine'):
+            try:
+                from src.rag.hybrid_search import HybridSearchEngine
+                print("🔄 Initializing hybrid search engine...")
+                self.hybrid_engine = HybridSearchEngine(
+                    vector_store=self.vector_store,
+                    index_path=f"data/vectorstore/bm25_index_{self.embedding_selector.get_current_model()}.pkl"
+                )
+                print_success("✅ Hybrid search engine initialized")
+            except Exception as e:
+                print_error(f"❌ Failed to initialize hybrid search: {e}")
+                print_info("   Falling back to semantic search")
+                self.rag_search_mode = 'semantic'
+                return
+        
+        print_success(f"✅ RAG search mode set to: {mode.upper()}")
+        
+        # Show mode-specific info
+        if mode == 'semantic':
+            print_info("   🧠 Using pure semantic search with embeddings")
+            print_info("   📊 Best for conceptual and topic-based queries")
+        elif mode == 'hybrid':
+            print_info("   🔄 Combining semantic + BM25 keyword search")
+            print_info("   ⚖️  Balanced approach for best overall performance")
+            if hasattr(self, 'hybrid_engine'):
+                stats = self.hybrid_engine.get_statistics()
+                print_info(f"   📚 BM25 vocabulary: {stats['bm25_vocabulary_size']:,} unique terms")
+                print_info(f"   📈 Average doc length: {stats['average_doc_length']:.1f} tokens")
+        elif mode == 'keyword':
+            print_info("   🔍 Using pure BM25 keyword search")
+            print_info("   📝 Best for exact term and error code searches")
+    
+    def _perform_search_with_mode(self, rag_query, query_embedding=None):
+        """Perform search using the selected RAG mode"""
+        try:
+            if self.rag_search_mode == 'semantic':
+                # Use standard RAG engine (semantic search)
+                return self.rag_engine.query(rag_query)
+            
+            elif self.rag_search_mode in ['hybrid', 'keyword']:
+                # Use hybrid search engine
+                if not hasattr(self, 'hybrid_engine') or self.hybrid_engine is None:
+                    # Initialize hybrid engine if not already done
+                    from src.rag.hybrid_search import HybridSearchEngine
+                    self.hybrid_engine = HybridSearchEngine(
+                        vector_store=self.vector_store,
+                        index_path=f"data/vectorstore/bm25_index_{self.embedding_selector.get_current_model()}.pkl"
+                    )
+                
+                # Generate embedding if not provided
+                if query_embedding is None:
+                    current_embedding_provider = self.embedding_selector.get_current_provider()
+                    query_embedding = current_embedding_provider.encode([rag_query.query])[0]
+                
+                # Perform search based on mode
+                if self.rag_search_mode == 'hybrid':
+                    # Hybrid search - combine semantic + keyword
+                    hybrid_results = self.hybrid_engine.hybrid_search(
+                        query=rag_query.query,
+                        query_embedding=query_embedding,
+                        k=rag_query.context_window
+                    )
+                else:  # keyword mode
+                    # Pure keyword search using BM25
+                    keyword_results = self.hybrid_engine.keyword_search(
+                        query=rag_query.query,
+                        k=rag_query.context_window
+                    )
+                    # Convert to hybrid result format for consistency
+                    hybrid_results = []
+                    for idx, score in keyword_results:
+                        if idx < len(self.vector_store.documents):
+                            from src.rag.hybrid_search import HybridSearchResult
+                            result = HybridSearchResult(
+                                content=self.vector_store.documents[idx],
+                                metadata=self.vector_store.metadata[idx] if idx < len(self.vector_store.metadata) else {},
+                                semantic_score=0.0,
+                                keyword_score=score,
+                                combined_score=score,
+                                rank=len(hybrid_results) + 1
+                            )
+                            hybrid_results.append(result)
+                
+                # Convert hybrid results to RAG engine result format
+                return self._convert_hybrid_to_rag_result(hybrid_results, rag_query.query)
+            
+            else:
+                # Fallback to semantic search
+                return self.rag_engine.query(rag_query)
+        
+        except Exception as e:
+            if self.analysis_verbose:
+                print_error(f"❌ Search mode '{self.rag_search_mode}' failed: {e}")
+                print_info("   Falling back to semantic search")
+            # Fallback to standard semantic search
+            return self.rag_engine.query(rag_query)
+    
+    def _convert_hybrid_to_rag_result(self, hybrid_results, query):
+        """Convert hybrid search results to RAG engine result format"""
+        # Create a mock RAG result that matches the expected format
+        class MockRAGResult:
+            def __init__(self, sources, query):
+                self.sources = sources
+                self.query = query
+                self.confidence = self._calculate_confidence(sources)
+                
+                # Generate answer using the model with retrieved context
+                context_text = "\n\n".join([
+                    f"Source {i+1}:\n{result.content[:500]}..."
+                    for i, result in enumerate(sources[:3])
+                ])
+                
+                prompt = f"""You are a PCIe debugging expert. Based on the following context, provide a detailed technical analysis for the user's query.
+
+Query: {query}
+
+Context from knowledge base:
+{context_text}
+
+Please structure your response with:
+1. **Analysis**: Technical explanation based on the context
+2. **Root Cause**: Most likely cause of the issue
+3. **Impact**: How this affects system operation  
+4. **Recommendations**: Specific debugging steps or fixes
+
+Be concise but thorough in your technical analysis."""
+                
+                self.answer = self._generate_answer_with_model(prompt)
+            
+            def _calculate_confidence(self, sources):
+                """Calculate confidence based on search scores"""
+                if not sources:
+                    return 0.0
+                avg_score = sum(s.combined_score for s in sources) / len(sources)
+                return min(avg_score, 1.0)  # Cap at 1.0
+            
+            def _generate_answer_with_model(self, prompt):
+                """Generate answer using the current model"""
+                try:
+                    # Use the model wrapper to generate response
+                    if hasattr(self, 'model_wrapper'):
+                        return self.model_wrapper.generate_completion(prompt)
+                    else:
+                        # Fallback - get the model selector and generate directly
+                        from src.models.model_selector import get_model_selector
+                        model_selector = get_model_selector()
+                        return model_selector.generate_completion(prompt)
+                except Exception as e:
+                    return f"Error generating response: {e}"
+        
+        # Convert hybrid results to the format expected by RAG result
+        converted_sources = []
+        for result in hybrid_results:
+            source = {
+                'content': result.content,
+                'metadata': result.metadata,
+                'score': result.combined_score
+            }
+            converted_sources.append(source)
+        
+        # Create mock result with proper answer generation
+        mock_result = MockRAGResult(converted_sources, query)
+        
+        # Patch the answer generation to use the instance's model wrapper
+        if hasattr(self, 'model_wrapper'):
+            context_text = "\n\n".join([
+                f"Source {i+1}:\n{result.content[:500]}..."
+                for i, result in enumerate(hybrid_results[:3])
+            ])
+            
+            prompt = f"""You are a PCIe debugging expert. Based on the following context, provide a detailed technical analysis for the user's query.
+
+Query: {query}
+
+Context from knowledge base:
+{context_text}
+
+Please structure your response with:
+1. **Analysis**: Technical explanation based on the context
+2. **Root Cause**: Most likely cause of the issue
+3. **Impact**: How this affects system operation  
+4. **Recommendations**: Specific debugging steps or fixes
+
+Be concise but thorough in your technical analysis."""
+            
+            mock_result.answer = self.model_wrapper.generate_completion(prompt)
+        
+        return mock_result
+    
     def do_tokens(self, arg):
         """Show detailed token usage information"""
         model_name = self.model_selector.get_current_model()
@@ -1158,7 +1395,7 @@ Please provide a comprehensive analysis."""
                     print("\n  1️⃣ Generating embeddings for query...")
                     embedding_start = time.time()
                 
-                # Use RAG engine for analysis
+                # Use RAG with selected search mode
                 from src.rag.enhanced_rag_engine import RAGQuery
                 rag_query = RAGQuery(query=query, context_window=5)
                 
@@ -1177,10 +1414,11 @@ Please provide a comprehensive analysis."""
                     print("\n  2️⃣ Searching vector database...")
                     search_start = time.time()
                     print(f"     → Vector DB size: {self.vector_store.index.ntotal} documents")
-                    print(f"     → Search method: FAISS (cosine similarity)")
+                    print(f"     → Search method: {self.rag_search_mode.upper()}")
                     print(f"     → Top-k retrieval: {rag_query.context_window} documents")
                 
-                result = self.rag_engine.query(rag_query)
+                # Use custom search based on selected mode
+                result = self._perform_search_with_mode(rag_query, query_embedding if self.analysis_verbose else None)
                 
                 if self.analysis_verbose:
                     search_time = time.time() - search_start - embedding_time
