@@ -1048,7 +1048,7 @@ Please provide a comprehensive analysis."""
         self.rag_search_mode = mode
         
         # Initialize hybrid search engine if needed
-        if mode in ['hybrid', 'keyword'] and not hasattr(self, 'hybrid_engine'):
+        if mode in ['hybrid', 'keyword'] and (not hasattr(self, 'hybrid_engine') or self.hybrid_engine is None):
             try:
                 from src.rag.hybrid_search import HybridSearchEngine
                 print("🔄 Initializing hybrid search engine...")
@@ -1072,10 +1072,13 @@ Please provide a comprehensive analysis."""
         elif mode == 'hybrid':
             print_info("   🔄 Combining semantic + BM25 keyword search")
             print_info("   ⚖️  Balanced approach for best overall performance")
-            if hasattr(self, 'hybrid_engine'):
-                stats = self.hybrid_engine.get_statistics()
-                print_info(f"   📚 BM25 vocabulary: {stats['bm25_vocabulary_size']:,} unique terms")
-                print_info(f"   📈 Average doc length: {stats['average_doc_length']:.1f} tokens")
+            if hasattr(self, 'hybrid_engine') and self.hybrid_engine is not None:
+                try:
+                    stats = self.hybrid_engine.get_statistics()
+                    print_info(f"   📚 BM25 vocabulary: {stats['bm25_vocabulary_size']:,} unique terms")
+                    print_info(f"   📈 Average doc length: {stats['average_doc_length']:.1f} tokens")
+                except Exception as e:
+                    print_info(f"   ℹ️  Statistics will be available after first search")
         elif mode == 'keyword':
             print_info("   🔍 Using pure BM25 keyword search")
             print_info("   📝 Best for exact term and error code searches")
