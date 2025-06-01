@@ -1,88 +1,43 @@
-# UVM Debug Agent 설정
+# PCIe Debug Agent Configuration
+# Default configuration with local models (no API keys required)
 
-# 기본 설정
-app_name: "UVM Debug Agent"
-version: "1.0.0"
-debug: false
-
-# 디렉토리 설정
-data_dir: "data"
-log_dir: "logs"
-report_dir: "reports"
-
-# 임베딩 설정
-embedding:
-  model: "sentence-transformers/all-MiniLM-L6-v2"
-  provider: "local"
-  api_key: ${EMBEDDING_API_KEY}
-  api_base_url: ${EMBEDDING_API_BASE_URL}
-  dimension: 384
-  batch_size: 100
-
-# LLM 설정
 llm:
-  provider: "local"  # Options: "openai", "anthropic", "local"
-  model: "llama-3.2-3b-instruct"
-  api_key: ${LLM_API_KEY}
-  api_base_url: ${LLM_API_BASE_URL}
+  provider: "openai"
+  model: "gpt-4o-mini"
   temperature: 0.1
   max_tokens: 2000
 
-# Local LLM 설정
 local_llm:
   models_dir: "models"
-  n_ctx: 8192  # Context window size
-  n_gpu_layers: -1  # Use all GPU layers on M1 (-1 for auto)
+  model_file: "Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+  preferred_model: "llama-3.2-3b"
+  n_ctx: 8192
+  n_gpu_layers: 0
+  n_threads: 4
   verbose: false
-  auto_download: true  # Automatically download models if not present
-  preferred_model: "llama-3.2-3b-instruct"
 
-# RAG 설정
-rag:
-  chunk_size: 500
-  chunk_overlap: 50
-  context_window: 5
-  min_similarity: 0.5
-  rerank: true
-
-# 벡터 스토어 설정
-vector_store:
-  index_path: "data/vectorstore/index.faiss"
-  index_type: "L2"
+embedding:
+  provider: "local"  # Use local embeddings
+  model: "sentence-transformers/all-MiniLM-L6-v2"
   dimension: 384
-
-# UI 설정
-ui:
-  theme: "light"
-  max_width: 1200
-  show_confidence: true
-  show_sources: true
-  group_by_file: true
-
-# 로깅 설정
-log_directories:
-  - "logs/simulation"
-  - "logs/verification"
-error_patterns:
-  - pattern: "UVM_ERROR"
-    severity: "ERROR"
-  - pattern: "UVM_FATAL"
-    severity: "FATAL"
-  - pattern: "UVM_WARNING"
-    severity: "WARNING"
-  - pattern: "UVM_INFO"
-    severity: "INFO"
-
-# 배치 처리 설정
-batch:
+  device: "cpu"
   batch_size: 32
-  parallel_workers: 4
 
-# 알림 설정
-notifications:
-  slack_webhook_url: "${SLACK_WEBHOOK_URL}"
-  smtp:
-    host: "smtp.gmail.com"
-    port: 587
-    username: "${SMTP_USERNAME}"
-    password: "${SMTP_PASSWORD}" 
+vector_store:
+  index_path: "data/vectorstore"
+  index_type: "L2"
+  
+rag:
+  chunk_size: 1000
+  chunk_overlap: 200
+  k_retrieval: 5
+  rerank: true
+  min_similarity: 0.3
+
+cache:
+  query_cache_size: 100
+  ttl_seconds: 3600
+  
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

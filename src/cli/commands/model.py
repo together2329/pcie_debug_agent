@@ -12,8 +12,19 @@ from ..utils.output import print_success, print_error, print_info, print_warning
 
 # Available models configuration
 AVAILABLE_MODELS = {
+    "gpt-4o-mini": {
+        "name": "GPT-4o-Mini (Default)",
+        "description": "OpenAI's efficient mini model - 2.5M tokens/day limit",
+        "api": "openai",
+        "context_size": 16384,
+        "speed": "very-fast",
+        "quality": "good",
+        "local": False,
+        "requires": "OPENAI_API_KEY",
+        "token_limit": "2.5M/day"
+    },
     "llama-3.2-3b": {
-        "name": "Llama 3.2 3B Instruct (Default)",
+        "name": "Llama 3.2 3B Instruct",
         "description": "Fast, efficient model for quick analysis",
         "model_file": "models/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
         "context_size": 8192,
@@ -81,7 +92,7 @@ def load_model_settings() -> Dict:
     if SETTINGS_FILE.exists():
         with open(SETTINGS_FILE, 'r') as f:
             return json.load(f)
-    return {"current_model": "llama-3.2-3b", "history": []}
+    return {"current_model": "gpt-4o-mini", "history": []}
 
 def save_model_settings(settings: Dict):
     """Save model settings"""

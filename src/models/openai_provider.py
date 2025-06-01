@@ -63,15 +63,23 @@ class OpenAIModelProvider(BaseModelProvider):
             Generated text response
         """
         try:
-            response = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=kwargs.get("temperature", 0.1),
-                max_tokens=kwargs.get("max_tokens", 2000),
-                top_p=kwargs.get("top_p", 1.0),
-                frequency_penalty=kwargs.get("frequency_penalty", 0),
-                presence_penalty=kwargs.get("presence_penalty", 0)
-            )
+            # Use appropriate parameter based on model
+            params = {
+                "model": self.model_name,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": kwargs.get("temperature", 0.1),
+                "top_p": kwargs.get("top_p", 1.0),
+                "frequency_penalty": kwargs.get("frequency_penalty", 0),
+                "presence_penalty": kwargs.get("presence_penalty", 0)
+            }
+            
+            # gpt-4o-mini and newer models use max_completion_tokens instead of max_tokens
+            if self.model_name in ["gpt-4o-mini", "o1-mini", "o3-mini", "o4-mini"]:
+                params["max_completion_tokens"] = kwargs.get("max_tokens", 2000)
+            else:
+                params["max_tokens"] = kwargs.get("max_tokens", 2000)
+            
+            response = self.client.chat.completions.create(**params)
             return response.choices[0].message.content
         except Exception as e:
             raise RuntimeError(f"OpenAI API error: {e}")
@@ -111,8 +119,15 @@ class OpenAIModelProvider(BaseModelProvider):
     def list_available_models() -> Dict[str, str]:
         """List available OpenAI models"""
         return {
-            "gpt-4o": "GPT-4o - Latest and most capable",
-            "gpt-4": "GPT-4 - High quality reasoning",
+            # Mini models (2.5M tokens/day limit)
+            "gpt-4o-mini": "GPT-4o-Mini - Efficient version (2.5M tokens/day)",
+            "o1-mini": "O1-Mini - Reasoning model (2.5M tokens/day)",
+            # Note: o4-mini, o3-mini will be available when released
+            # Standard models (250K tokens/day limit)
+            "gpt-4o": "GPT-4o - Latest and most capable (250K tokens/day)",
+            "gpt-4": "GPT-4 - High quality reasoning (250K tokens/day)",
+            "o1": "O1 - Advanced reasoning (250K tokens/day)",
+            # Other models
             "gpt-4-turbo": "GPT-4 Turbo - Fast and capable",
             "gpt-3.5-turbo": "GPT-3.5 Turbo - Fast and efficient"
         }

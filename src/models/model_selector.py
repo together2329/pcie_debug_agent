@@ -154,6 +154,11 @@ class ModelSelector:
     
     # Model configurations
     MODEL_CONFIGS = {
+        "gpt-4o-mini": {
+            "provider": "openai",
+            "model_name": "gpt-4o-mini",
+            "context_size": 16384
+        },
         "mock-llm": {
             "provider": "local",
             "model_path": "models/mock-model.gguf",
@@ -196,8 +201,12 @@ class ModelSelector:
                 settings = json.load(f)
                 self.current_model_id = settings.get("current_model", "mock-llm")
         else:
-            # Default to mock-llm which always works
-            self.current_model_id = "mock-llm"
+            # Default to gpt-4o-mini if API key is available, otherwise mock-llm
+            import os
+            if os.getenv("OPENAI_API_KEY"):
+                self.current_model_id = "gpt-4o-mini"
+            else:
+                self.current_model_id = "mock-llm"
     
     def get_current_model(self) -> str:
         """Get current model ID"""

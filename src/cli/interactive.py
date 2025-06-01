@@ -156,11 +156,12 @@ Examples:
             print("-" * 50)
             
             models = {
+                "gpt-4o-mini": {"desc": "GPT-4o-Mini - Efficient OpenAI model (2.5M tokens/day)", "available": True},
                 "mock-llm": {"desc": "Mock LLM - Built-in offline model", "available": True},
                 "llama-3.2-3b": {"desc": "Llama 3.2 3B - Fast local analysis", "available": True},
                 "deepseek-r1-7b": {"desc": "DeepSeek R1 7B - Detailed reasoning (Ollama) ⚠️ Memory intensive", "available": True},
-                "gpt-4o": {"desc": "GPT-4o - Latest OpenAI model (API)", "available": True},
-                "gpt-4": {"desc": "GPT-4 - Best quality (API)", "available": True},
+                "gpt-4o": {"desc": "GPT-4o - Latest OpenAI model (250K tokens/day)", "available": True},
+                "gpt-4": {"desc": "GPT-4 - Best quality (250K tokens/day)", "available": True},
                 "claude-3-opus": {"desc": "Claude 3 Opus - Best quality (API)", "available": False}
             }
             
@@ -173,7 +174,7 @@ Examples:
             print("Use '/model <name>' to switch")
         else:
             # Check if model is available before switching
-            available_models = ["mock-llm", "llama-3.2-3b", "deepseek-r1-7b", "gpt-4o", "gpt-4"]
+            available_models = ["gpt-4o-mini", "mock-llm", "llama-3.2-3b", "deepseek-r1-7b", "gpt-4o", "gpt-4"]
             
             if arg not in available_models:
                 if arg in ["claude-3-opus"]:
