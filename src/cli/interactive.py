@@ -600,6 +600,557 @@ Examples:
         except Exception as e:
             print_error(f"Search failed: {e}")
     
+    
+    def do_msearch(self, arg):
+        """Metadata-enhanced search with filters
+        Usage: /msearch <query> [--version VERSION] [--type TYPE] [--component COMP]
+        
+        Examples:
+            /msearch "link training" --version 4.0
+            /msearch "error handling" --type error_log --component endpoint
+            /msearch "LTSSM timeout" --severity error
+        """
+        if not arg:
+            print("Usage: /msearch <query> [--version VERSION] [--type TYPE] [--component COMP]")
+            return
+        
+        if not self.rag_enabled or not self.vector_store:
+            print_error("❌ Vector database not loaded. RAG features are disabled.")
+            return
+        
+        try:
+            # Parse arguments
+            parts = arg.split()
+            query_parts = []
+            filters = {}
+            
+            i = 0
+            while i < len(parts):
+                if parts[i].startswith('--'):
+                    if i + 1 < len(parts):
+                        key = parts[i][2:]
+                        value = parts[i + 1]
+                        filters[key] = value
+                        i += 2
+                    else:
+                        i += 1
+                else:
+                    query_parts.append(parts[i])
+                    i += 1
+            
+            query = ' '.join(query_parts)
+            
+            # Show search info
+            print(f"\n🔍 Metadata Search: '{query}'")
+            if filters:
+                print("📋 Filters:")
+                for key, value in filters.items():
+                    print(f"   {key}: {value}")
+            print("-" * 50)
+            
+            # Create metadata query
+            from src.rag.metadata_enhanced_rag import MetadataRAGQuery, MetadataEnhancedRAGEngine
+            from src.rag.metadata_extractor import PCIeDocumentType, PCIeVersion, ErrorSeverity
+            
+            # Initialize metadata engine if not exists
+            if not hasattr(self, 'metadata_engine'):
+                from src.rag.metadata_extractor import MetadataExtractor
+                metadata_extractor = MetadataExtractor(self.model_manager, self.llm_model)
+                self.metadata_engine = MetadataEnhancedRAGEngine(
+                    self.vector_store,
+                    self.model_manager,
+                    metadata_extractor
+                )
+            
+            # Build metadata query
+            metadata_query = MetadataRAGQuery(
+                query=query,
+                context_window=5,
+                pcie_versions=[filters.get('version')] if 'version' in filters else None,
+                document_types=[PCIeDocumentType(filters.get('type'))] if 'type' in filters else None,
+                error_severity=ErrorSeverity(filters.get('severity')) if 'severity' in filters else None,
+                components=[filters.get('component')] if 'component' in filters else None
+            )
+            
+            # Execute query
+            response = self.metadata_engine.query_with_metadata(metadata_query)
+            
+            # Display results
+            print(f"\n💡 Answer (Confidence: {response.confidence:.1%}):")
+            print(response.answer)
+            
+            if response.sources:
+                print(f"\n📚 Sources ({len(response.sources)} documents):")
+                for i, source in enumerate(response.sources, 1):
+                    print(f"\n{i}. {source['title']}")
+                    metadata = source['metadata']
+                    if metadata.get('pcie_version'):
+                        print(f"   PCIe: {', '.join(metadata['pcie_version'])}")
+                    if metadata.get('document_type'):
+                        print(f"   Type: {metadata['document_type']}")
+                    print(f"   Score: {source['relevance_score']:.3f}")
+            
+            # Show performance info in verbose mode
+            if self.analysis_verbose and response.metadata:
+                print(f"\n⚡ Performance:")
+                print(f"   Query time: {response.metadata.get('query_time', 0):.2f}s")
+                if response.metadata.get('metadata_filters_applied'):
+                    print(f"   Filtered: {response.metadata.get('initial_results', 0)} → {response.metadata.get('filtered_results', 0)} results")
+                    
+        except Exception as e:
+            print_error(f"❌ Metadata search failed: {str(e)}")
+            if self.analysis_verbose:
+                import traceback
+                traceback.print_exc()
+    
+    def do_mextract(self, arg):
+        """Extract metadata from a document
+        Usage: /mextract <file_path> [--quick]
+        """
+        if not arg:
+            print("Usage: /mextract <file_path> [--quick]")
+            return
+            
+        parts = arg.split()
+        file_path = parts[0]
+        quick = '--quick' in parts
+        
+        try:
+            from pathlib import Path
+            path = Path(file_path)
+            
+            if not path.exists():
+                print_error(f"❌ File not found: {file_path}")
+                return
+            
+            print_info(f"📄 Extracting metadata from: {path.name}")
+            
+            # Read file content
+            with open(path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # Initialize extractor if needed
+            if not hasattr(self, 'metadata_extractor'):
+                from src.rag.metadata_extractor import MetadataExtractor
+                self.metadata_extractor = MetadataExtractor(self.model_manager, self.llm_model)
+            
+            if quick:
+                print_info("Using quick extraction (regex-based)...")
+                metadata = self.metadata_extractor.extract_quick_metadata(content)
+                
+                print_success("\n✅ Quick metadata extracted:")
+                for key, value in metadata.items():
+                    if value and value != []:
+                        print(f"  {key}: {value}")
+            else:
+                print_info("Using LLM extraction (this may take a moment)...")
+                
+                # Run async extraction
+                import asyncio
+                metadata = asyncio.run(
+                    self.metadata_extractor.extract_metadata(content, str(path))
+                )
+                
+                print_success("\n✅ Rich metadata extracted:")
+                print(f"  Type: {metadata.document_type.value}")
+                print(f"  Title: {metadata.title}")
+                print(f"  Summary: {metadata.summary}")
+                
+                if metadata.pcie_version:
+                    print(f"  PCIe versions: {[v.value for v in metadata.pcie_version]}")
+                if metadata.topics:
+                    print(f"  Topics: {', '.join(metadata.topics)}")
+                if metadata.error_codes:
+                    print(f"  Error codes: {', '.join(metadata.error_codes[:5])}")
+                if metadata.components:
+                    print(f"  Components: {', '.join(metadata.components)}")
+                
+                print(f"\n  Confidence: {metadata.confidence_score:.1%}")
+                
+        except Exception as e:
+            print_error(f"❌ Metadata extraction failed: {str(e)}")
+    
+    def do_mstats(self, arg):
+        """Show metadata statistics for indexed documents"""
+        if not self.vector_store:
+            print_error("❌ Vector database not loaded")
+            return
+            
+        try:
+            print_info("📊 Metadata Statistics")
+            print("=" * 60)
+            
+            total_docs = len(self.vector_store.documents)
+            has_metadata = sum(1 for m in self.vector_store.metadata if m and len(m) > 1)
+            
+            print(f"\nTotal documents: {total_docs}")
+            print(f"With rich metadata: {has_metadata} ({has_metadata/total_docs*100:.1f}%)")
+            
+            # Analyze metadata
+            doc_types = {}
+            pcie_versions = {}
+            topics_count = {}
+            
+            for metadata in self.vector_store.metadata:
+                if metadata:
+                    # Document types
+                    doc_type = metadata.get('document_type', 'unknown')
+                    doc_types[doc_type] = doc_types.get(doc_type, 0) + 1
+                    
+                    # PCIe versions
+                    for version in metadata.get('pcie_version', []):
+                        pcie_versions[version] = pcie_versions.get(version, 0) + 1
+                    
+                    # Topics
+                    for topic in metadata.get('topics', []):
+                        topics_count[topic] = topics_count.get(topic, 0) + 1
+            
+            if doc_types:
+                print("\nDocument types:")
+                for dtype, count in sorted(doc_types.items(), key=lambda x: x[1], reverse=True):
+                    print(f"  {dtype}: {count}")
+            
+            if pcie_versions:
+                print("\nPCIe versions coverage:")
+                for version, count in sorted(pcie_versions.items()):
+                    print(f"  PCIe {version}: {count} documents")
+            
+            if topics_count:
+                print("\nTop topics:")
+                for topic, count in sorted(topics_count.items(), key=lambda x: x[1], reverse=True)[:10]:
+                    print(f"  {topic}: {count}")
+                    
+        except Exception as e:
+            print_error(f"❌ Failed to get statistics: {str(e)}")
+    
+
+    def do_urag(self, arg):
+        """Unified RAG query using intelligent method combination
+        Usage: /urag <query> [--strategy STRATEGY] [--priority PRIORITY] [--time TIME]
+        
+        Strategies: fast, balanced, comprehensive, adaptive (default)
+        Priority: speed, accuracy, balance (default)
+        Time: max response time in seconds
+        
+        Examples:
+            /urag "PCIe 4.0 link training issues"
+            /urag "debug LTSSM timeout" --strategy comprehensive --priority accuracy
+            /urag "Gen3 speed" --strategy fast --time 1.0
+        """
+        if not arg:
+            print("Usage: /urag <query> [--strategy STRATEGY] [--priority PRIORITY] [--time TIME]")
+            return
+        
+        if not self.rag_enabled or not self.vector_store:
+            print_error("❌ Vector database not loaded. RAG features are disabled.")
+            return
+        
+        try:
+            # Parse arguments
+            parts = arg.split()
+            query_parts = []
+            options = {}
+            
+            i = 0
+            while i < len(parts):
+                if parts[i].startswith('--'):
+                    if i + 1 < len(parts):
+                        key = parts[i][2:]
+                        value = parts[i + 1]
+                        options[key] = value
+                        i += 2
+                    else:
+                        i += 1
+                else:
+                    query_parts.append(parts[i])
+                    i += 1
+            
+            query = ' '.join(query_parts)
+            
+            # Show query info
+            print(f"\n🔄 Unified RAG Query: '{query}'")
+            if options:
+                print("⚙️  Options:")
+                for key, value in options.items():
+                    print(f"   {key}: {value}")
+            print("-" * 60)
+            
+            # Initialize unified RAG engine if not exists
+            if not hasattr(self, 'unified_rag'):
+                from src.rag.unified_rag_engine import UnifiedRAGEngine
+                self.unified_rag = UnifiedRAGEngine(
+                    self.vector_store,
+                    self.model_manager
+                )
+            
+            # Create unified query
+            from src.rag.unified_rag_engine import UnifiedRAGQuery, ProcessingStrategy
+            
+            # Map strategy strings to enums
+            strategy_map = {
+                "fast": ProcessingStrategy.FAST_ONLY,
+                "balanced": ProcessingStrategy.BALANCED,
+                "comprehensive": ProcessingStrategy.COMPREHENSIVE,
+                "adaptive": ProcessingStrategy.ADAPTIVE,
+                "cascading": ProcessingStrategy.CASCADING
+            }
+            
+            strategy = strategy_map.get(options.get('strategy', 'adaptive'), ProcessingStrategy.ADAPTIVE)
+            priority = options.get('priority', 'balance')
+            max_time = float(options.get('time', 0)) if options.get('time') else None
+            
+            unified_query = UnifiedRAGQuery(
+                query=query,
+                strategy=strategy,
+                priority=priority,
+                max_response_time=max_time,
+                user_expertise=getattr(self, 'user_expertise', 'intermediate')
+            )
+            
+            # Execute unified query
+            import asyncio
+            response = asyncio.run(self.unified_rag.query(unified_query))
+            
+            # Display results
+            print(f"\n🎯 Answer (Confidence: {response.confidence:.1%}):")
+            print(response.answer)
+            
+            if response.sources:
+                print(f"\n📚 Sources ({len(response.sources)} documents):")
+                for i, source in enumerate(response.sources[:5], 1):
+                    print(f"\n{i}. Document {source['document_id']}")
+                    if 'metadata' in source and source['metadata'].get('title'):
+                        print(f"   Title: {source['metadata']['title']}")
+                    print(f"   Score: {source['final_score']:.3f}")
+                    
+                    # Show method contributions
+                    contributions = source.get('method_contributions', {})
+                    if contributions:
+                        contrib_str = ", ".join([f"{method}: {score:.2f}" for method, score in contributions.items()])
+                        print(f"   Methods: {contrib_str}")
+                    
+                    consensus = source.get('consensus_score', 0)
+                    if consensus > 0:
+                        print(f"   Consensus: {consensus:.1%}")
+            
+            # Show performance breakdown
+            print(f"\n⚡ Performance:")
+            print(f"   Total time: {response.total_processing_time:.2f}s")
+            print(f"   Methods used: {', '.join(response.methods_used)}")
+            
+            if self.analysis_verbose:
+                print(f"   Method breakdown:")
+                for method, time_taken in response.processing_breakdown.items():
+                    contribution = response.method_contributions.get(method, 0)
+                    print(f"     {method}: {time_taken:.2f}s (weight: {contribution:.1%})")
+                
+                print(f"   Result diversity: {response.result_diversity:.1%}")
+                print(f"   Consensus score: {response.consensus_score:.1%}")
+                
+                if response.metadata:
+                    print(f"   Query type: {response.metadata.get('query_type', 'unknown')}")
+                    print(f"   Total documents: {response.metadata.get('total_documents_considered', 0)}")
+                    
+        except Exception as e:
+            print_error(f"❌ Unified RAG failed: {str(e)}")
+            if self.analysis_verbose:
+                import traceback
+                traceback.print_exc()
+    
+    def do_urag_status(self, arg):
+        """Show unified RAG system status and metrics"""
+        try:
+            if not hasattr(self, 'unified_rag'):
+                print_info("🔄 Unified RAG engine not initialized")
+                print("   Run a /urag query first to initialize")
+                return
+            
+            metrics = self.unified_rag.metrics
+            
+            print("🔄 Unified RAG System Status")
+            print("=" * 60)
+            
+            print(f"\n📊 Overall Statistics:")
+            print(f"   Queries processed: {metrics['queries_processed']}")
+            print(f"   Average processing time: {metrics['avg_processing_time']:.2f}s")
+            
+            if metrics['method_usage_stats']:
+                print(f"\n🎯 Method Usage Statistics:")
+                for method, stats in metrics['method_usage_stats'].items():
+                    print(f"   {method}:")
+                    print(f"     Used: {stats['count']} times")
+                    print(f"     Avg time: {stats['avg_time']:.2f}s")
+            
+            if metrics['strategy_effectiveness']:
+                print(f"\n⚙️  Strategy Effectiveness:")
+                for strategy, stats in metrics['strategy_effectiveness'].items():
+                    print(f"   {strategy}:")
+                    print(f"     Used: {stats['count']} times")
+                    print(f"     Avg time: {stats['avg_time']:.2f}s")
+                    print(f"     Avg methods: {stats['avg_methods']:.1f}")
+            
+            # Performance recommendations
+            print(f"\n💡 Performance Insights:")
+            if metrics['queries_processed'] > 5:
+                fastest_method = min(metrics['method_usage_stats'].items(), 
+                                   key=lambda x: x[1]['avg_time'])
+                print(f"   Fastest method: {fastest_method[0]} ({fastest_method[1]['avg_time']:.2f}s)")
+                
+                most_used = max(metrics['method_usage_stats'].items(),
+                              key=lambda x: x[1]['count'])
+                print(f"   Most used method: {most_used[0]} ({most_used[1]['count']} times)")
+            else:
+                print("   Run more queries for detailed insights")
+                
+        except Exception as e:
+            print_error(f"❌ Failed to get unified RAG status: {str(e)}")
+    
+    def do_urag_config(self, arg):
+        """Configure unified RAG system settings
+        Usage: /urag_config [show|set <key> <value>]
+        
+        Available settings:
+            expertise: beginner, intermediate, expert
+            default_strategy: fast, balanced, comprehensive, adaptive
+            default_priority: speed, accuracy, balance
+            timeout: default timeout in seconds
+        """
+        if not arg:
+            arg = "show"
+        
+        try:
+            parts = arg.split()
+            command = parts[0]
+            
+            if command == "show":
+                print("🔄 Unified RAG Configuration")
+                print("=" * 50)
+                
+                config = getattr(self, 'urag_config', {
+                    'expertise': 'intermediate',
+                    'default_strategy': 'adaptive',
+                    'default_priority': 'balance',
+                    'timeout': None
+                })
+                
+                for key, value in config.items():
+                    print(f"   {key}: {value}")
+                
+            elif command == "set" and len(parts) >= 3:
+                key = parts[1]
+                value = parts[2]
+                
+                if not hasattr(self, 'urag_config'):
+                    self.urag_config = {}
+                
+                # Validate settings
+                valid_settings = {
+                    'expertise': ['beginner', 'intermediate', 'expert'],
+                    'default_strategy': ['fast', 'balanced', 'comprehensive', 'adaptive'],
+                    'default_priority': ['speed', 'accuracy', 'balance'],
+                    'timeout': 'numeric'
+                }
+                
+                if key in valid_settings:
+                    if valid_settings[key] == 'numeric':
+                        try:
+                            value = float(value)
+                        except ValueError:
+                            print_error(f"❌ {key} must be a number")
+                            return
+                    elif value not in valid_settings[key]:
+                        print_error(f"❌ Invalid value for {key}. Valid: {valid_settings[key]}")
+                        return
+                    
+                    self.urag_config[key] = value
+                    print_success(f"✅ Set {key} = {value}")
+                else:
+                    print_error(f"❌ Unknown setting: {key}")
+            else:
+                print("Usage: /urag_config [show|set <key> <value>]")
+                
+        except Exception as e:
+            print_error(f"❌ Configuration failed: {str(e)}")
+    
+    def do_urag_test(self, arg):
+        """Test unified RAG with different strategies
+        Usage: /urag_test <query>
+        
+        Runs the same query with all strategies and compares results
+        """
+        if not arg:
+            print("Usage: /urag_test <query>")
+            return
+        
+        if not self.rag_enabled or not self.vector_store:
+            print_error("❌ Vector database not loaded")
+            return
+        
+        try:
+            print(f"🧪 Testing Unified RAG Strategies")
+            print(f"Query: '{arg}'")
+            print("=" * 60)
+            
+            # Initialize unified RAG if needed
+            if not hasattr(self, 'unified_rag'):
+                from src.rag.unified_rag_engine import UnifiedRAGEngine
+                self.unified_rag = UnifiedRAGEngine(
+                    self.vector_store,
+                    self.model_manager
+                )
+            
+            from src.rag.unified_rag_engine import UnifiedRAGQuery, ProcessingStrategy
+            
+            strategies = [
+                ("Fast Only", ProcessingStrategy.FAST_ONLY),
+                ("Balanced", ProcessingStrategy.BALANCED),
+                ("Comprehensive", ProcessingStrategy.COMPREHENSIVE),
+                ("Adaptive", ProcessingStrategy.ADAPTIVE)
+            ]
+            
+            results = {}
+            
+            for strategy_name, strategy in strategies:
+                print(f"\n🔄 Testing {strategy_name}...")
+                
+                query = UnifiedRAGQuery(
+                    query=arg,
+                    strategy=strategy,
+                    priority="balance"
+                )
+                
+                import asyncio
+                response = asyncio.run(self.unified_rag.query(query))
+                
+                results[strategy_name] = response
+                
+                print(f"   Time: {response.total_processing_time:.2f}s")
+                print(f"   Confidence: {response.confidence:.1%}")
+                print(f"   Methods: {', '.join(response.methods_used)}")
+                print(f"   Sources: {len(response.sources)}")
+            
+            # Comparison summary
+            print(f"\n📊 Strategy Comparison:")
+            print(f"{'Strategy':<15} {'Time':<8} {'Confidence':<12} {'Methods':<10} {'Sources':<8}")
+            print("-" * 55)
+            
+            for strategy_name, response in results.items():
+                print(f"{strategy_name:<15} {response.total_processing_time:.2f}s{'':<3} "
+                      f"{response.confidence:.1%}{'':<6} "
+                      f"{len(response.methods_used):<10} "
+                      f"{len(response.sources):<8}")
+            
+            # Best strategy recommendation
+            best_balanced = max(results.items(), 
+                              key=lambda x: x[1].confidence - x[1].total_processing_time * 0.1)
+            print(f"\n🏆 Recommended: {best_balanced[0]}")
+            
+        except Exception as e:
+            print_error(f"❌ Testing failed: {str(e)}")
+            if self.analysis_verbose:
+                import traceback
+                traceback.print_exc()
+    
     def do_analyze(self, arg):
         """Analyze PCIe log file"""
         if not arg:
@@ -2035,19 +2586,69 @@ Be concise but thorough in your technical analysis."""
         return True
     
     def default(self, line):
+        """Process default queries using Unified RAG"""
+        if line.strip().startswith('/'):
+            # Handle slash commands
+            super().default(line)
+            return
+        
+        # Use Unified RAG for regular queries
+        if hasattr(self, 'unified_rag') and self.unified_rag:
+            self._process_unified_rag_query(line)
+        else:
+            self._process_regular_query(line)
+    
+    def _process_unified_rag_query(self, query):
+        """Process query using Unified RAG"""
+        try:
+            from src.rag.unified_rag_engine import UnifiedRAGQuery
+            
+            # Create unified query
+            unified_query = UnifiedRAGQuery(
+                query=query,
+                strategy=self.rag_search_mode if hasattr(self, 'rag_search_mode') else "adaptive",
+                priority="balance",
+                user_expertise=getattr(self, 'user_expertise', 'intermediate')
+            )
+            
+            # Execute query
+            import asyncio
+            response = asyncio.run(self.unified_rag.query(unified_query))
+            
+            # Display result
+            print(f"\n💡 Answer (Confidence: {response.confidence:.1%}):")
+            print(response.answer)
+            
+            if response.sources and self.analysis_verbose:
+                print(f"\n📚 Sources ({len(response.sources)}):")
+                for i, source in enumerate(response.sources[:3], 1):
+                    print(f"  {i}. Score: {source.get('final_score', 0):.3f}")
+                    if 'metadata' in source and source['metadata'].get('filename'):
+                        print(f"     File: {source['metadata']['filename']}")
+                
+                print(f"\n⚡ Performance:")
+                print(f"   Methods: {', '.join(response.methods_used)}")
+                print(f"   Time: {response.total_processing_time:.2f}s")
+            
+        except Exception as e:
+            print_error(f"❌ Unified RAG query failed: {e}")
+            self._process_regular_query(query)
+    
+    def _process_regular_query(self, query):
+        """Fallback to regular query processing"""
         """Handle non-command input as PCIe questions"""
-        if not line.strip():
+        if not query.strip():
             return
         
         # Handle slash commands
-        if line.startswith('/'):
+        if query.startswith('/'):
             # Show command suggestions if just "/" is typed
-            if line.strip() == '/':
+            if query.strip() == '/':
                 self._show_command_suggestions()
                 return
             
             # Convert slash command to method call
-            parts = line[1:].split(None, 1)
+            parts = query[1:].split(None, 1)
             cmd = parts[0]
             arg = parts[1] if len(parts) > 1 else ''
             
@@ -2073,7 +2674,7 @@ Be concise but thorough in your technical analysis."""
             return
         
         # Process as PCIe debugging query
-        self._process_query(line)
+        self._process_query(query)
         self.turn_count += 1
     
     def _process_query(self, query: str):
@@ -2343,6 +2944,52 @@ Be concise but thorough in your technical analysis."""
             "mock-llm": "Built-in Mock"
         }
         return provider_map.get(model_name, "Unknown")
+    
+    def onecmd(self, line):
+        """Override to handle slash commands properly"""
+        line = line.strip()
+        if not line:
+            return False
+        
+        # Handle slash commands
+        if line.startswith('/'):
+            # Show command suggestions if just "/" is typed
+            if line == '/':
+                self._show_command_suggestions()
+                return False
+            
+            # Convert slash command to method call
+            parts = line[1:].split(None, 1)
+            cmd = parts[0]
+            arg = parts[1] if len(parts) > 1 else ''
+            
+            # Check if command exists
+            if hasattr(self, f'do_{cmd}'):
+                # Execute the command
+                try:
+                    return getattr(self, f'do_{cmd}')(arg)
+                except Exception as e:
+                    print_error(f"❌ Error executing /{cmd}: {e}")
+                    if self.verbose:
+                        import traceback
+                        traceback.print_exc()
+                    return False
+            else:
+                # Show partial command matches if command not found
+                matching_commands = self._find_matching_commands(cmd)
+                if matching_commands:
+                    print(f"❌ Unknown command: /{cmd}")
+                    print("📝 Did you mean:")
+                    for match in matching_commands[:5]:  # Show top 5 matches
+                        print(f"   /{match}")
+                else:
+                    print(f"❌ Unknown command: /{cmd}")
+                    print("   Type / for available commands or /help for detailed help")
+                return False
+        else:
+            # Process as regular query
+            self.default(line)
+            return False
     
     def cmdloop(self, intro=None):
         """Override cmdloop to set up completion and handle errors gracefully"""

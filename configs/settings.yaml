@@ -1,43 +1,7 @@
-# PCIe Debug Agent Configuration
-# Default configuration with local models (no API keys required)
-
-llm:
-  provider: "openai"
-  model: "gpt-4o-mini"
-  temperature: 0.1
-  max_tokens: 2000
-
-local_llm:
-  models_dir: "models"
-  model_file: "Llama-3.2-3B-Instruct-Q4_K_M.gguf"
-  preferred_model: "llama-3.2-3b"
-  n_ctx: 8192
-  n_gpu_layers: 0
-  n_threads: 4
-  verbose: false
-
-embedding:
-  provider: "local"  # Use local embeddings
-  model: "sentence-transformers/all-MiniLM-L6-v2"
-  dimension: 384
-  device: "cpu"
-  batch_size: 32
-
-vector_store:
-  index_path: "data/vectorstore"
-  index_type: "L2"
-  
-rag:
-  chunk_size: 1000
-  chunk_overlap: 200
-  k_retrieval: 5
-  rerank: true
-  min_similarity: 0.3
-
-cache:
-  query_cache_size: 100
-  ttl_seconds: 3600
-  
-logging:
-  level: "INFO"
-  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+default_embedding_model: text-embedding-3-small
+default_model: gpt-4o-mini
+default_rag_mode: unified_adaptive
+embedding_dimension: 1536
+enable_unified_rag: true
+unified_rag_default: true
+vector_store_path: ./data/vectorstore/unified_openai_1536d

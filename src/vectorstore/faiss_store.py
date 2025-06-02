@@ -29,8 +29,15 @@ class FAISSVectorStore:
         self.documents = []
         
         # Try to load existing index if path provided
-        if index_path:
-            self.load_index(index_path)
+        if index_path and Path(index_path).exists():
+            try:
+                loaded_store = self.load(index_path)
+                self.index = loaded_store.index
+                self.documents = loaded_store.documents
+                self.metadata = loaded_store.metadata
+            except Exception as e:
+                self.logger.warning(f"Could not load existing index from {index_path}: {e}")
+                # Continue with empty index
     
     def add_documents(self, 
                      embeddings: List[List[float]], 
