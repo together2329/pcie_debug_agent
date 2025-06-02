@@ -79,4 +79,80 @@ models/
 *deepseek_vs_llama_test_*.json
 *deepseek*test*.py
 *llama*test*.py
-hybrid_llm_test_results_*.json 
+hybrid_llm_test_results_*.json
+
+# Development and test scripts
+demo_*.py
+setup_*.py
+*_demo.py
+*_test.py
+test_*.py
+fix_*.py
+add_*.py
+update_*.py
+run_*.py
+quick_*.py
+simple_*.py
+finalize_*.py
+check_*.py
+show_*.py
+suppress_*.py
+create_*.py
+compare_*.py
+visualize_*.py
+
+# Analysis and comparison files
+*_analysis.py
+*_comparison*.py
+*_performance*.py
+*_quality*.py
+
+# Documentation generated during development
+CLI_*.md
+COMPLETE_*.md
+FEATURE_*.md
+HYBRID_*.md
+ISSUE_*.md
+METADATA_*.md
+RAG_*.md
+README_*.md
+TESTING_*.md
+ULTIMATE_*.md
+UNIFIED_*.md
+OPENAI_*.md
+*_SUMMARY.md
+*_GUIDE.md
+*_ANALYSIS.md
+*_COMPARISON.md
+*_REPORT.md
+*_STATUS.md
+
+# Test results and reports
+*_test_report*.json
+*_test_results*.json
+*_test_summary*.md
+*_comparison_*.json
+*_analysis_*.json
+*_quality_*.json
+*_performance_*.json
+*_setup_report_*.json
+*rag_process_details.txt
+*quality_test_summary*.md
+*cli_quality_analysis.md
+*manual_test_guide.md
+
+# Chat and UI demos
+*chat*.py
+*pcie_chat*.py
+*auto_rag*.py
+
+# Shell scripts for testing
+*.sh
+
+# Temporary analysis files
+*_enhancement_report.md
+*_compression_*.json
+*_compression_*.md
+
+# Ignore scripts directory (development scripts)
+scripts/ 
