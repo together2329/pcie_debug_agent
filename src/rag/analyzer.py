@@ -1,4 +1,3 @@
-import openai
 from typing import List, Dict, Any, Optional
 import json
 import logging
@@ -14,16 +13,43 @@ class Analyzer:
                  model: str = "gpt-4",
                  temperature: float = 0.1,
                  max_tokens: int = 2000,
-                 api_key: Optional[str] = None):
+                 api_key: Optional[str] = None,
+                 model_manager: Optional[Any] = None):
         
         self.llm_provider = llm_provider
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.model_manager = model_manager
         
-        # API 설정
-        if llm_provider == "openai":
-            openai.api_key = api_key
+        # Store API key for later use if needed
+        self.api_key = api_key
+            
+    def analyze(self,
+               query: str,
+               context: str,
+               analysis_type: str = "answer_with_sources") -> str:
+        """
+        Generic analysis method for RAG queries
+        
+        Args:
+            query: User query
+            context: Retrieved context documents
+            analysis_type: Type of analysis to perform
+            
+        Returns:
+            Analysis response string
+        """
+        prompt = f"""You are a PCIe debugging expert. Based on the following context, answer the user's query.
+
+Query: {query}
+
+Context:
+{context}
+
+Please provide a detailed technical answer based on the context provided."""
+
+        return self._call_llm(prompt)
             
     def analyze_error(self,
                      error: 'UVMError',
@@ -121,19 +147,28 @@ Please format your response as a JSON object with the above sections."""
     def _call_llm(self, prompt: str) -> str:
         """LLM API 호출"""
         try:
-            if self.llm_provider == "openai":
-                response = openai.ChatCompletion.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "system", "content": "You are a UVM verification expert."},
-                        {"role": "user", "content": prompt}
-                    ],
+            # Use model_manager if available
+            if self.model_manager and hasattr(self.model_manager, 'generate_completion'):
+                return self.model_manager.generate_completion(
+                    prompt=prompt,
                     temperature=self.temperature,
                     max_tokens=self.max_tokens
                 )
-                return response.choices[0].message.content
-            else:
-                raise NotImplementedError(f"Provider {self.llm_provider} not implemented")
+            
+            # Otherwise, try to use the model selector directly
+            try:
+                from src.models.model_selector import get_model_selector
+                model_selector = get_model_selector()
+                return model_selector.generate_completion(
+                    prompt=prompt,
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens
+                )
+            except Exception as e:
+                logger.error(f"Failed to use model selector: {e}")
+                
+                # Final fallback
+                return "Unable to generate response due to LLM configuration issues."
                 
         except Exception as e:
             logger.error(f"LLM API call failed: {e}")

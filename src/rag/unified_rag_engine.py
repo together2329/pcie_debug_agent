@@ -306,7 +306,7 @@ class UnifiedRAGEngine:
             
             # Generate final response
             response = await self._generate_unified_response(
-                unified_query, fused_results, method_results, method_weights
+                unified_query, fused_results, method_results, method_weights, query_type
             )
             
             # Update metrics
@@ -554,7 +554,8 @@ class UnifiedRAGEngine:
                                        query: UnifiedRAGQuery,
                                        fused_results: List[Tuple[str, Dict[str, Any], float]],
                                        method_results: List[MethodResult],
-                                       method_weights: Dict[str, float]) -> UnifiedRAGResponse:
+                                       method_weights: Dict[str, float],
+                                       query_type: QueryType) -> UnifiedRAGResponse:
         """Generate unified response from fused results"""
         
         # Prepare context for LLM
@@ -622,7 +623,7 @@ class UnifiedRAGEngine:
             consensus_score=avg_consensus,
             total_processing_time=total_time,
             metadata={
-                "query_type": query_type.value if 'query_type' in locals() else "unknown",
+                "query_type": query_type.value,
                 "strategy_used": "adaptive",
                 "total_documents_considered": sum(len(r.documents) for r in method_results)
             }
@@ -684,7 +685,7 @@ class UnifiedRAGEngine:
             stats["avg_time"] = (prev_avg * (stats["count"] - 1) + result.processing_time) / stats["count"]
         
         # Update strategy effectiveness
-        strategy_key = strategy.value
+        strategy_key = strategy.value if hasattr(strategy, 'value') else str(strategy)
         if strategy_key not in self.metrics["strategy_effectiveness"]:
             self.metrics["strategy_effectiveness"][strategy_key] = {
                 "count": 0, "avg_time": 0, "avg_methods": 0

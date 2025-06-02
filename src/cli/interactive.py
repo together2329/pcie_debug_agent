@@ -12,7 +12,7 @@ import time
 import numpy as np
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 
 from src.models.model_selector import get_model_selector
 from src.models.embedding_selector import get_embedding_selector
@@ -60,7 +60,7 @@ Type your PCIe questions directly or use slash commands.
         # RAG components
         self.vector_store = None
         self.rag_engine = None
-        self.rag_search_mode = 'unified'  # Default search mode (best performance)
+        self.rag_search_mode = 'semantic'  # Default search mode (most reliable)
         self.hybrid_engine = None  # Will be initialized when needed
         
         # Session state
@@ -72,6 +72,10 @@ Type your PCIe questions directly or use slash commands.
         # Streaming configuration
         self.streaming_enabled = True  # Enable streaming by default
         self.stream_delay = 0.01  # Small delay between chunks for better visual effect
+        
+        # Initialize model wrapper/manager
+        self.model_wrapper = None
+        self.model_manager = None  # Will be set during initialization
         
         # Initialize system
         self._initialize_system()
@@ -142,6 +146,12 @@ Type your PCIe questions directly or use slash commands.
                         raise RuntimeError("RAG not enabled - no vector database")
                     provider = self.embedding_selector.get_current_provider()
                     return provider.encode(texts)
+                
+                def embed(self, texts: Union[str, List[str]]) -> np.ndarray:
+                    """Embed text(s) - alias for generate_embeddings for compatibility"""
+                    if isinstance(texts, str):
+                        texts = [texts]
+                    return self.generate_embeddings(texts)
             
             # Initialize RAG engine only if vector store is available and compatible
             if self.rag_enabled and self.vector_store:
@@ -150,9 +160,11 @@ Type your PCIe questions directly or use slash commands.
                 vector_db_dim = self.vector_store.dimension
                 
                 if embedding_dim == vector_db_dim:
+                    self.model_wrapper = ModelWrapper(self.model_selector, self.embedding_selector, rag_enabled=True)
+                    self.model_manager = self.model_wrapper  # Set model_manager for unified RAG
                     self.rag_engine = EnhancedRAGEngine(
                         vector_store=self.vector_store,
-                        model_manager=ModelWrapper(self.model_selector, self.embedding_selector, rag_enabled=True)
+                        model_manager=self.model_wrapper
                     )
                 else:
                     # Dimension mismatch - disable RAG
@@ -166,10 +178,12 @@ Type your PCIe questions directly or use slash commands.
                     self.rag_enabled = False
                     self.rag_engine = None
                     self.model_wrapper = ModelWrapper(self.model_selector, self.embedding_selector, rag_enabled=False)
+                    self.model_manager = self.model_wrapper  # Set model_manager even without RAG
             else:
                 # Use direct model without RAG
                 self.rag_engine = None
                 self.model_wrapper = ModelWrapper(self.model_selector, self.embedding_selector, rag_enabled=False)
+                self.model_manager = self.model_wrapper  # Set model_manager even without RAG
             
             if self.verbose:
                 print("✅ System ready!")
@@ -1274,26 +1288,14 @@ Please provide a comprehensive analysis."""
                         
                         self.rag_enabled = True
                         
-                        # Re-initialize RAG engine
-                        from sentence_transformers import SentenceTransformer
-                        
-                        class ModelWrapper:
-                            def __init__(self, selector, embedding_selector):
-                                self.selector = selector
-                                self.embedding_selector = embedding_selector
-                            
-                            def generate_completion(self, prompt: str, **kwargs) -> str:
-                                filtered_kwargs = {k: v for k, v in kwargs.items() 
-                                                 if k not in ['provider', 'model']}
-                                return self.selector.generate_completion(prompt, **filtered_kwargs)
-                            
-                            def generate_embeddings(self, texts: List[str]) -> np.ndarray:
-                                provider = self.embedding_selector.get_current_provider()
-                                return provider.encode(texts)
+                        # Re-initialize RAG engine using the existing ModelWrapper class
+                        # Update the existing model wrapper with RAG enabled
+                        if hasattr(self.model_wrapper, 'rag_enabled'):
+                            self.model_wrapper.rag_enabled = True
                         
                         self.rag_engine = EnhancedRAGEngine(
                             vector_store=self.vector_store,
-                            model_manager=ModelWrapper(self.model_selector, self.embedding_selector)
+                            model_manager=self.model_wrapper
                         )
                         
                         print_success("✅ RAG enabled successfully!")
@@ -2004,12 +2006,13 @@ Please provide a comprehensive analysis."""
                     loop.close()
                 
                 # Convert unified response to standard RAG result format
-                from src.rag.enhanced_rag_engine import RAGResult
-                rag_result = RAGResult()
-                rag_result.query = rag_query.query
-                rag_result.sources = unified_response.sources[:rag_query.context_window]
-                rag_result.answer = unified_response.answer
-                rag_result.confidence = unified_response.confidence
+                from src.rag.enhanced_rag_engine import RAGResponse
+                rag_result = RAGResponse(
+                    answer=unified_response.answer,
+                    sources=unified_response.sources[:rag_query.context_window],
+                    confidence=unified_response.confidence,
+                    metadata=unified_response.metadata
+                )
                 
                 return rag_result
             

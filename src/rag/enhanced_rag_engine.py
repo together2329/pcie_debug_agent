@@ -64,7 +64,8 @@ class EnhancedRAGEngine:
             llm_provider=llm_provider,
             model=llm_model,
             temperature=temperature,
-            max_tokens=max_tokens
+            max_tokens=max_tokens,
+            model_manager=model_manager
         )
         
         # 성능 메트릭
