@@ -2703,6 +2703,8 @@ Be concise but thorough in your technical analysis."""
                     print("\n🔧 Analysis Pipeline (RAG ENABLED):")
                     print("\n  1️⃣ Generating embeddings for query...")
                     embedding_start = time.time()
+                    
+                    # Note: Embedding model is cached after first use for performance
                 
                 # Use RAG with selected search mode
                 from src.rag.enhanced_rag_engine import RAGQuery
@@ -2711,6 +2713,12 @@ Be concise but thorough in your technical analysis."""
                 if self.analysis_verbose:
                     # Show embedding details
                     current_embedding_provider = self.embedding_selector.get_current_provider()
+                    
+                    # Check if provider is cached
+                    provider_info = current_embedding_provider.get_info()
+                    model_name = provider_info.get('model', 'unknown')
+                    
+                    # Generate embedding
                     query_embedding = current_embedding_provider.encode([query])[0]
                     embedding_time = time.time() - embedding_start
                     
@@ -2718,6 +2726,8 @@ Be concise but thorough in your technical analysis."""
                     print(f"     ✓ Embedding model: {current_embedding_model}")
                     print(f"     ✓ Embedding dimension: {len(query_embedding)}")
                     print(f"     ✓ Embedding time: {embedding_time:.3f}s")
+                    if embedding_time < 0.1:
+                        print(f"     ✓ Model cached: Fast response")
                     print(f"     ✓ Embedding norm: {np.linalg.norm(query_embedding):.4f}")
                     
                     print("\n  2️⃣ Searching vector database...")

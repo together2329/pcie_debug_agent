@@ -79,6 +79,10 @@ class SentenceTransformerProvider(BaseEmbeddingProvider):
 class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
     """OpenAI embedding provider"""
     
+    # Class-level client to reuse across instances
+    _client = None
+    _client_api_key = None
+    
     def __init__(self, model_name: str = "text-embedding-3-small"):
         self.model_name = model_name
         self.api_key = os.getenv("OPENAI_API_KEY")
@@ -86,11 +90,16 @@ class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
         if not self.api_key:
             raise ValueError("OpenAI API key not found. Set OPENAI_API_KEY environment variable.")
         
-        try:
-            import openai
-            self.client = openai.OpenAI(api_key=self.api_key)
-        except ImportError:
-            raise ImportError("OpenAI package not installed. Run: pip install openai")
+        # Only create client if not exists or API key changed
+        if OpenAIEmbeddingProvider._client is None or OpenAIEmbeddingProvider._client_api_key != self.api_key:
+            try:
+                import openai
+                OpenAIEmbeddingProvider._client = openai.OpenAI(api_key=self.api_key)
+                OpenAIEmbeddingProvider._client_api_key = self.api_key
+            except ImportError:
+                raise ImportError("OpenAI package not installed. Run: pip install openai")
+        
+        self.client = OpenAIEmbeddingProvider._client
         
         # Model dimensions
         self.dimensions = {
@@ -143,6 +152,9 @@ class EmbeddingSelector:
     def __init__(self):
         self.settings_file = Path.home() / ".pcie_debug" / "embedding_settings.json"
         self.settings_file.parent.mkdir(exist_ok=True)
+        
+        # Provider cache to avoid recreating instances
+        self._provider_cache = {}
         
         # Available models
         self.available_models = {
@@ -261,12 +273,23 @@ class EmbeddingSelector:
             return False
         
         try:
+            # Check if we already have this provider cached
+            cache_key = model_id
+            if cache_key in self._provider_cache:
+                self.current_provider = self._provider_cache[cache_key]
+                self.current_model = model_id
+                self._save_settings()
+                # print(f"[DEBUG] Using cached embedding provider for {model_id}")
+                return True
+            
             model_config = self.available_models[model_id]
             provider_class = model_config["provider"]
             model_name = model_config["model_name"]
             
-            # Create provider instance
-            self.current_provider = provider_class(model_name)
+            # Create provider instance and cache it
+            provider = provider_class(model_name)
+            self._provider_cache[cache_key] = provider
+            self.current_provider = provider
             self.current_model = model_id
             
             # Save settings
