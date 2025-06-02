@@ -60,7 +60,7 @@ Type your PCIe questions directly or use slash commands.
         # RAG components
         self.vector_store = None
         self.rag_engine = None
-        self.rag_search_mode = 'semantic'  # Default search mode
+        self.rag_search_mode = 'unified'  # Default search mode (best performance)
         self.hybrid_engine = None  # Will be initialized when needed
         
         # Session state
@@ -295,7 +295,7 @@ Type your PCIe questions directly or use slash commands.
             matches = [model for model in embedding_models if model.startswith(text)]
         
         elif cmd_name == 'rag_mode':
-            modes = ["semantic", "hybrid", "keyword"]
+            modes = ["semantic", "hybrid", "keyword", "unified"]
             matches = [mode for mode in modes if mode.startswith(text)]
         
         elif cmd_name in ['rag_files', 'rag_check']:
@@ -1903,11 +1903,16 @@ Please provide a comprehensive analysis."""
             print("             • Best for exact term searches")
             print("             • Good for specific error codes/names")
             print()
-            print("Usage: /rag_mode <semantic|hybrid|keyword>")
+            print("  unified   - Adaptive multi-strategy search (BEST)")
+            print("             • Intelligently combines all methods")
+            print("             • Adaptive query routing")
+            print("             • Best overall performance")
+            print()
+            print("Usage: /rag_mode <semantic|hybrid|keyword|unified>")
             return
         
         mode = arg.lower()
-        valid_modes = ['semantic', 'hybrid', 'keyword']
+        valid_modes = ['semantic', 'hybrid', 'keyword', 'unified']
         
         if mode not in valid_modes:
             print_error(f"❌ Invalid mode: {mode}")
@@ -1958,6 +1963,11 @@ Please provide a comprehensive analysis."""
         elif mode == 'keyword':
             print_info("   🔍 Using pure BM25 keyword search")
             print_info("   📝 Best for exact term and error code searches")
+        elif mode == 'unified':
+            print_info("   🚀 Using Unified Adaptive RAG (BEST)")
+            print_info("   🧠 Intelligently combines semantic, keyword, and metadata search")
+            print_info("   🎯 Adaptive query routing for optimal results")
+            print_info("   ⚡ Best overall performance and accuracy")
     
     def _perform_search_with_mode(self, rag_query, query_embedding=None):
         """Perform search using the selected RAG mode"""
@@ -1965,6 +1975,43 @@ Please provide a comprehensive analysis."""
             if self.rag_search_mode == 'semantic':
                 # Use standard RAG engine (semantic search)
                 return self.rag_engine.query(rag_query)
+            
+            elif self.rag_search_mode == 'unified':
+                # Use unified RAG engine (adaptive multi-strategy)
+                if not hasattr(self, 'unified_rag') or self.unified_rag is None:
+                    # Initialize unified RAG engine if not already done
+                    from src.rag.unified_rag_engine import UnifiedRAGEngine
+                    self.unified_rag = UnifiedRAGEngine(
+                        vector_store=self.vector_store,
+                        model_manager=self.model_manager
+                    )
+                
+                # Convert to UnifiedRAGQuery
+                from src.rag.unified_rag_engine import UnifiedRAGQuery
+                unified_query = UnifiedRAGQuery(
+                    query=rag_query.query,
+                    strategy="adaptive",  # Let it choose the best strategy
+                    priority="balance"    # Balance speed and quality
+                )
+                
+                # Execute unified query
+                import asyncio
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    unified_response = loop.run_until_complete(self.unified_rag.query(unified_query))
+                finally:
+                    loop.close()
+                
+                # Convert unified response to standard RAG result format
+                from src.rag.enhanced_rag_engine import RAGResult
+                rag_result = RAGResult()
+                rag_result.query = rag_query.query
+                rag_result.sources = unified_response.sources[:rag_query.context_window]
+                rag_result.answer = unified_response.answer
+                rag_result.confidence = unified_response.confidence
+                
+                return rag_result
             
             elif self.rag_search_mode in ['hybrid', 'keyword']:
                 # Use hybrid search engine
