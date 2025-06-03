@@ -249,26 +249,131 @@ class EnhancedRAGEngine:
         return boost * 0.5  # 최대 50% 부스트
     
     def _build_context(self, documents: List[Dict[str, Any]], include_metadata: bool) -> str:
-        """컨텍스트 구성"""
+        """Enhanced context construction with automatic citation tracking"""
         context_parts = []
         
         for i, doc in enumerate(documents):
-            context_part = f"[Source {i+1}]\n"
+            source_id = i + 1
+            context_part = f"[Source {source_id}]\n"
             
+            # Enhanced metadata extraction with citation information
             if include_metadata and doc.get('metadata'):
                 meta = doc['metadata']
-                if 'file_name' in meta:
-                    context_part += f"File: {meta['file_name']}\n"
-                if 'section' in meta:
-                    context_part += f"Section: {meta['section']}\n"
-                if 'page' in meta:
-                    context_part += f"Page: {meta['page']}\n"
+                citation_info = self._extract_citation_info(meta, doc.get('content', ''))
+                
+                if citation_info['file_name']:
+                    context_part += f"File: {citation_info['file_name']}\n"
+                if citation_info['section']:
+                    context_part += f"Section: {citation_info['section']}\n"
+                if citation_info['page']:
+                    context_part += f"Page: {citation_info['page']}\n"
+                if citation_info['spec_reference']:
+                    context_part += f"Specification: {citation_info['spec_reference']}\n"
+                if citation_info['authority_level']:
+                    context_part += f"Authority: {citation_info['authority_level']}\n"
             
+            # Add content with relevance scoring
             context_part += f"Content: {doc['content']}\n"
             context_part += f"Relevance Score: {doc['score']:.3f}\n"
+            
+            # Add citation instructions for LLM
+            context_part += f"Citation Format: [Source {source_id}]\n"
+            
             context_parts.append(context_part)
         
-        return "\n---\n".join(context_parts)
+        # Add citation instructions at the end
+        citation_instructions = self._generate_citation_instructions(len(documents))
+        context_with_instructions = "\n---\n".join(context_parts) + "\n\n" + citation_instructions
+        
+        return context_with_instructions
+    
+    def _extract_citation_info(self, metadata: Dict[str, Any], content: str) -> Dict[str, str]:
+        """Extract comprehensive citation information from metadata and content"""
+        citation_info = {
+            'file_name': '',
+            'section': '',
+            'page': '',
+            'spec_reference': '',
+            'authority_level': ''
+        }
+        
+        # Basic metadata
+        citation_info['file_name'] = metadata.get('file_name', metadata.get('source', ''))
+        citation_info['section'] = metadata.get('section', '')
+        citation_info['page'] = str(metadata.get('page', '')) if metadata.get('page') else ''
+        
+        # Extract specification references from content
+        spec_patterns = [
+            r'PCIe\s+(?:Base\s+)?Spec(?:ification)?\s+(\d+\.\d+)',
+            r'PCI\s+Express\s+(?:Base\s+)?Specification\s+(\d+\.\d+)',
+            r'Chapter\s+(\d+(?:\.\d+)*)',
+            r'Section\s+(\d+(?:\.\d+)*)',
+        ]
+        
+        for pattern in spec_patterns:
+            match = re.search(pattern, content, re.IGNORECASE)
+            if match:
+                citation_info['spec_reference'] = match.group(0)
+                break
+        
+        # Determine authority level based on source type and content
+        citation_info['authority_level'] = self._determine_authority_level(metadata, content)
+        
+        return citation_info
+    
+    def _determine_authority_level(self, metadata: Dict[str, Any], content: str) -> str:
+        """Determine the authority level of the source"""
+        file_name = metadata.get('file_name', '').lower()
+        content_lower = content.lower()
+        
+        # Official specifications
+        if any(term in file_name for term in ['pcie_spec', 'pci_express_spec', 'specification']):
+            return 'Official Specification'
+        
+        # Standards documents
+        if any(term in file_name for term in ['standard', 'ieee', 'iso']):
+            return 'Industry Standard'
+        
+        # Technical documentation
+        if any(term in file_name for term in ['manual', 'guide', 'reference']):
+            return 'Technical Documentation'
+        
+        # Analysis of content for authority indicators
+        authority_indicators = {
+            'specification': 'Specification Document',
+            'compliance': 'Compliance Guide',
+            'debug': 'Debug Guide',
+            'troubleshoot': 'Troubleshooting Manual',
+            'error': 'Error Reference'
+        }
+        
+        for indicator, level in authority_indicators.items():
+            if indicator in content_lower:
+                return level
+        
+        return 'General Reference'
+    
+    def _generate_citation_instructions(self, num_sources: int) -> str:
+        """Generate citation instructions for the LLM"""
+        instructions = """
+**CITATION REQUIREMENTS:**
+When providing your answer, you MUST cite sources using the format [Source X] where X is the source number.
+
+Citation Guidelines:
+1. Cite specific sources when making factual claims
+2. Use [Source 1], [Source 2], etc. to reference the sources above
+3. Prefer authoritative sources (specifications, official docs) over general references
+4. Multiple sources can be cited for the same point: [Source 1, Source 3]
+5. Include source citations naturally within your response text
+
+Example: "PCIe completion timeouts typically occur when a request is not completed within the specified time limit [Source 1]. The timeout value is configurable in the device's configuration space [Source 2]."
+"""
+        
+        if num_sources > 0:
+            source_list = ", ".join([f"Source {i+1}" for i in range(num_sources)])
+            instructions += f"\nAvailable sources: {source_list}"
+        
+        return instructions
     
     def _create_prompt(self, query: str, context: str) -> str:
         """LLM 프롬프트 생성 (PCIe 특화)"""
@@ -329,24 +434,265 @@ class EnhancedRAGEngine:
         return answer
 
     def _calculate_confidence(self, documents: List[Dict[str, Any]], answer: str) -> float:
-        """신뢰도 계산"""
+        """Advanced confidence calculation with multi-layered PCIe domain intelligence"""
         if not documents:
             return 0.0
         
-        # 평균 유사도 점수
+        try:
+            return self._advanced_confidence_calculation(documents, answer)
+        except Exception as e:
+            logger.warning(f"Advanced confidence calculation failed, using fallback: {e}")
+            return self._fallback_confidence_calculation(documents, answer)
+    
+    def _advanced_confidence_calculation(self, documents: List[Dict[str, Any]], answer: str) -> float:
+        """Multi-layered confidence calculation with domain intelligence"""
+        
+        # Initialize confidence components
+        confidence_components = {
+            'base_similarity': 0.0,
+            'technical_alignment': 0.0,
+            'content_quality': 0.0,
+            'domain_expertise': 0.0,
+            'answer_completeness': 0.0,
+            'source_reliability': 0.0
+        }
+        
+        # 1. Base similarity score (30% weight)
         avg_score = np.mean([doc['score'] for doc in documents])
+        confidence_components['base_similarity'] = min(avg_score * 0.3, 0.30)
         
-        # 답변 길이 기반 조정
-        answer_length_factor = min(len(answer) / 500, 1.0)  # 500자를 기준으로
+        # 2. Technical alignment score (25% weight)
+        confidence_components['technical_alignment'] = self._calculate_technical_alignment(documents, answer) * 0.25
         
-        # 소스 인용 확인
+        # 3. Content quality score (20% weight)
+        confidence_components['content_quality'] = self._calculate_content_quality(documents, answer) * 0.20
+        
+        # 4. Domain expertise score (15% weight)
+        confidence_components['domain_expertise'] = self._calculate_domain_expertise(documents, answer) * 0.15
+        
+        # 5. Answer completeness score (10% weight)
+        confidence_components['answer_completeness'] = self._calculate_answer_completeness(documents, answer) * 0.10
+        
+        # 6. Source reliability score (10% weight)  
+        confidence_components['source_reliability'] = self._calculate_source_reliability(documents) * 0.10
+        
+        # Apply domain-specific multipliers
+        domain_multiplier = self._get_domain_multiplier(documents, answer)
+        
+        # Calculate total confidence
+        base_confidence = sum(confidence_components.values())
+        final_confidence = min(base_confidence * domain_multiplier, 1.0)
+        
+        # Log confidence breakdown for debugging
+        self.logger.debug(f"Confidence breakdown: {confidence_components}, "
+                         f"domain_multiplier: {domain_multiplier:.3f}, "
+                         f"final: {final_confidence:.3f}")
+        
+        return final_confidence
+    
+    def _calculate_technical_alignment(self, documents: List[Dict[str, Any]], answer: str) -> float:
+        """Calculate how well the answer aligns with PCIe technical concepts"""
+        
+        # PCIe technical concepts with weights
+        technical_concepts = {
+            # Core concepts (high weight)
+            'pcie': 1.0, 'function level reset': 1.0, 'flr': 1.0,
+            'configuration request retry status': 1.0, 'crs': 1.0,
+            'link training state machine': 1.0, 'ltssm': 1.0,
+            'completion timeout': 1.0, 'advanced error reporting': 1.0,
+            
+            # Specific technical terms (medium weight)
+            'transaction layer packet': 0.8, 'tlp': 0.8,
+            'data link layer packet': 0.8, 'dllp': 0.8,
+            'message signaled interrupt': 0.8, 'msi': 0.8, 'msi-x': 0.8,
+            'poisoned tlp': 0.8, 'malformed tlp': 0.8, 'ecrc error': 0.8,
+            
+            # General terms (lower weight)
+            'endpoint': 0.6, 'root complex': 0.6, 'switch': 0.6,
+            'configuration space': 0.6, 'capability': 0.6,
+            'gen1': 0.5, 'gen2': 0.5, 'gen3': 0.5, 'gen4': 0.5, 'gen5': 0.5,
+        }
+        
+        combined_text = answer.lower() + " " + " ".join([doc.get('content', '') for doc in documents[:3]]).lower()
+        
+        alignment_score = 0.0
+        matched_concepts = 0
+        
+        for concept, weight in technical_concepts.items():
+            if concept in combined_text:
+                alignment_score += weight
+                matched_concepts += 1
+        
+        # Normalize by number of possible matches and apply diminishing returns
+        if matched_concepts > 0:
+            normalized_score = min(alignment_score / (matched_concepts * 1.2), 1.0)
+            return normalized_score
+        
+        return 0.1  # Small base score if no technical terms found
+    
+    def _calculate_content_quality(self, documents: List[Dict[str, Any]], answer: str) -> float:
+        """Calculate content quality based on structure, citations, and coherence"""
+        
+        quality_score = 0.0
+        
+        # 1. Answer structure quality
+        if len(answer) > 100:  # Reasonable length
+            quality_score += 0.3
+        
+        # 2. Source citations present
+        citation_count = 0
+        for i in range(len(documents)):
+            if f"[Source {i+1}]" in answer or f"source {i+1}" in answer.lower():
+                citation_count += 1
+        
+        citation_ratio = min(citation_count / max(len(documents), 1), 1.0)
+        quality_score += citation_ratio * 0.3
+        
+        # 3. Technical specificity
+        technical_indicators = ['0x', 'bit', 'register', 'offset', 'specification', 'chapter', 'section']
+        specificity_count = sum(1 for indicator in technical_indicators if indicator in answer.lower())
+        quality_score += min(specificity_count / len(technical_indicators), 1.0) * 0.2
+        
+        # 4. Explanation depth
+        explanation_indicators = ['because', 'due to', 'results in', 'causes', 'leads to', 'therefore']
+        explanation_count = sum(1 for indicator in explanation_indicators if indicator in answer.lower())
+        quality_score += min(explanation_count / 3, 1.0) * 0.2
+        
+        return min(quality_score, 1.0)
+    
+    def _calculate_domain_expertise(self, documents: List[Dict[str, Any]], answer: str) -> float:
+        """Calculate domain expertise level of the answer"""
+        
+        expertise_score = 0.0
+        
+        # PCIe specification references
+        spec_patterns = [
+            r'pcie\s+(?:base\s+)?spec(?:ification)?',
+            r'chapter\s+\d+',
+            r'section\s+\d+(?:\.\d+)*',
+            r'table\s+\d+',
+            r'figure\s+\d+',
+        ]
+        
+        combined_text = answer.lower()
+        spec_matches = sum(1 for pattern in spec_patterns if re.search(pattern, combined_text))
+        expertise_score += min(spec_matches / len(spec_patterns), 1.0) * 0.4
+        
+        # Error code specificity
+        error_patterns = [
+            r'0x[0-9a-f]+',  # Hex error codes
+            r'bit\s+\d+',    # Bit positions
+            r'register\s+0x[0-9a-f]+',  # Register addresses
+        ]
+        
+        error_matches = sum(1 for pattern in error_patterns if re.search(pattern, combined_text))
+        expertise_score += min(error_matches / len(error_patterns), 1.0) * 0.3
+        
+        # Troubleshooting depth
+        troubleshooting_terms = [
+            'debug', 'analyze', 'check', 'verify', 'confirm', 'investigate',
+            'root cause', 'workaround', 'solution', 'fix'
+        ]
+        
+        troubleshooting_count = sum(1 for term in troubleshooting_terms if term in combined_text)
+        expertise_score += min(troubleshooting_count / len(troubleshooting_terms), 1.0) * 0.3
+        
+        return min(expertise_score, 1.0)
+    
+    def _calculate_answer_completeness(self, documents: List[Dict[str, Any]], answer: str) -> float:
+        """Calculate how complete the answer is relative to available information"""
+        
+        if not documents:
+            return 0.0
+        
+        # Check coverage of available information
+        total_content_length = sum(len(doc.get('content', '')) for doc in documents)
+        answer_length = len(answer)
+        
+        # Ideal answer should use substantial portion of available content
+        coverage_ratio = min(answer_length / max(total_content_length * 0.1, 100), 1.0)
+        
+        # Check if answer addresses multiple aspects
+        question_aspects = ['what', 'why', 'how', 'when', 'where']
+        addressed_aspects = sum(1 for aspect in question_aspects 
+                              if any(aspect in answer.lower() for aspect in question_aspects))
+        
+        aspect_score = min(addressed_aspects / len(question_aspects), 1.0)
+        
+        # Combine coverage and aspect scores
+        completeness = (coverage_ratio * 0.7) + (aspect_score * 0.3)
+        
+        return min(completeness, 1.0)
+    
+    def _calculate_source_reliability(self, documents: List[Dict[str, Any]]) -> float:
+        """Calculate reliability of source documents"""
+        
+        if not documents:
+            return 0.0
+        
+        reliability_score = 0.0
+        
+        for doc in documents:
+            metadata = doc.get('metadata', {})
+            doc_reliability = 0.0
+            
+            # File type reliability
+            file_type = metadata.get('file_type', '').lower()
+            if file_type == 'pdf':
+                doc_reliability += 0.4  # PDFs often more authoritative
+            elif file_type in ['md', 'txt']:
+                doc_reliability += 0.3
+            
+            # Source name indicators
+            source_name = metadata.get('file_name', '').lower()
+            if any(indicator in source_name for indicator in ['spec', 'standard', 'official']):
+                doc_reliability += 0.3
+            elif any(indicator in source_name for indicator in ['manual', 'guide', 'doc']):
+                doc_reliability += 0.2
+            
+            # Content length indicates depth
+            content_length = len(doc.get('content', ''))
+            if content_length > 500:
+                doc_reliability += 0.3
+            elif content_length > 200:
+                doc_reliability += 0.2
+            
+            reliability_score += min(doc_reliability, 1.0)
+        
+        # Average reliability across documents
+        return min(reliability_score / len(documents), 1.0)
+    
+    def _get_domain_multiplier(self, documents: List[Dict[str, Any]], answer: str) -> float:
+        """Get domain-specific confidence multiplier"""
+        
+        combined_text = answer.lower() + " " + " ".join([doc.get('content', '') for doc in documents[:2]]).lower()
+        
+        # High-confidence domains
+        if any(term in combined_text for term in ['completion timeout', 'flr', 'function level reset']):
+            return 1.15  # High confidence for well-documented issues
+        
+        # Medium-confidence domains
+        if any(term in combined_text for term in ['ltssm', 'link training', 'error', 'debug']):
+            return 1.10
+        
+        # Complex domains that need careful handling
+        if any(term in combined_text for term in ['compliance', 'specification', 'protocol']):
+            return 1.05
+        
+        return 1.0  # Base multiplier
+    
+    def _fallback_confidence_calculation(self, documents: List[Dict[str, Any]], answer: str) -> float:
+        """Fallback confidence calculation if advanced method fails"""
+        
+        avg_score = np.mean([doc['score'] for doc in documents])
+        answer_length_factor = min(len(answer) / 500, 1.0)
+        
         citation_factor = 1.0
         for i in range(len(documents)):
             if f"[Source {i+1}]" in answer:
                 citation_factor += 0.1
         citation_factor = min(citation_factor, 1.5)
         
-        # 최종 신뢰도
         confidence = avg_score * answer_length_factor * citation_factor
         return min(confidence, 1.0)
     
