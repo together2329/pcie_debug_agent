@@ -31,6 +31,12 @@ The interactive shell (`src/cli/interactive.py`) provides Claude Code-style comm
 - `/rag_model [model]` - Switch RAG embedding models
 - `/rag_mode [mode]` - Select search mode (semantic/hybrid/keyword)
 
+#### Enhanced Context-Based RAG System (2025-06-03)
+- `/context_rag <query>` - **Self-evolving contextual RAG** with Optuna optimization
+- `/context_rag <query> --context hint1,hint2` - Query with contextual hints
+- `/context_rag --evolve` - Trigger automatic system evolution and optimization
+- `/context_rag --status` - Show evolution status and system configuration
+
 #### Unified RAG System (2025-06-03)
 - `/rag <query>` - **Primary RAG command** with intelligent PCIe analysis and auto-testing
 - `/rag <query> --engine [production|v3|standard]` - Query with specific engine
@@ -68,6 +74,8 @@ The interactive shell (`src/cli/interactive.py`) provides Claude Code-style comm
 - `/exit` or `/quit` - Exit the shell
 
 ### 5. Key Features Added
+- **Self-Evolving Context RAG**: AutoRAG-Agent with Optuna optimization and adaptive learning
+- **Contextual Query Enhancement**: Query expansion, filtering, and PCIe domain intelligence
 - **Unified RAG System**: Single `/rag` command with auto-testing and quality monitoring
 - **Auto-Quality Testing**: Automated background testing every hour with 10 PCIe scenarios
 - **Multi-Engine Fallback**: Production, V3, and Standard engines with automatic switching
@@ -111,7 +119,10 @@ python src/cli/main.py --model gpt-4o-mini
 # With verbose mode
 python src/cli/main.py --verbose
 
-# Deploy unified RAG system (one-time setup)
+# Deploy enhanced context-based RAG system (recommended)
+python deploy_enhanced_rag.py
+
+# Deploy unified RAG system (alternative)
 python deploy_unified_rag.py
 ```
 
@@ -135,6 +146,21 @@ pcie-debug vectordb build --model text-embedding-3-small
 5. **Add test cases**: Update `automated_rag_test_suite.py` for new features
 6. Test thoroughly with all search modes
 7. Update CLAUDE.md documentation
+
+### Enhanced Context RAG Management
+```bash
+# Self-evolving contextual queries
+/context_rag "why dut send successful completion during flr?"
+
+# Query with contextual hints
+/context_rag "completion timeout causes" --context debug,troubleshooting
+
+# Trigger system evolution and optimization
+/context_rag --evolve
+
+# Check evolution status and configuration
+/context_rag --status
+```
 
 ### Unified RAG Quality Management
 ```bash
@@ -194,6 +220,11 @@ pcie-debug vectordb build --model text-embedding-3-small
 4. **Instant compliance checking** with spec reference citations
 
 #### Files Added
+- `auto_rag_system.py` - Self-evolving RAG system with Optuna optimization
+- `enhanced_context_rag.py` - Contextual RAG engine with domain intelligence  
+- `deploy_enhanced_rag.py` - Enhanced RAG deployment and setup
+- `eval_queries.json` - PCIe evaluation dataset for optimization
+- `requirements_auto_rag.txt` - Dependencies for enhanced RAG system
 - `automated_rag_test_suite.py` - Comprehensive quality testing framework
 - `unified_rag_integration.py` - Multi-engine RAG system with auto-testing
 - `deploy_unified_rag.py` - One-command deployment and setup
@@ -215,7 +246,14 @@ pcie-debug vectordb build --model text-embedding-3-small
 - **Hybrid**: Normalized combination (0.0-1.0), best overall performance
 - **Keyword**: BM25 scores (0.0-10.0+), best for exact term matches
 
-### Unified RAG System (Current)
+### Enhanced Context-Based RAG System (Current - Recommended)
+- **Self-Evolving Optimization**: AutoRAG-Agent with Optuna TPE sampler for continuous improvement
+- **Contextual Intelligence**: Query expansion, filtering, and PCIe domain-specific enhancements
+- **Adaptive Chunking**: Dynamic strategies (fixed, heading-aware, sliding window) optimized via evolution
+- **Performance Optimization**: Automatic parameter tuning for recall@3, MRR, and latency optimization
+- **Evolution Metrics**: Target >95% recall@3 with <15min optimization cycles
+
+### Unified RAG System (Alternative)
 - **Multi-Engine Architecture**: Production, V3, and Standard engines with automatic fallback
 - **Auto-Quality Testing**: 10 PCIe test scenarios including FLR/CRS compliance
 - **Performance Monitoring**: Real-time confidence, response time, and success rate tracking

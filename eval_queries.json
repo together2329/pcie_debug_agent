@@ -1,0 +1,139 @@
+[
+  {
+    "question": "why dut send successful return of completion during flr ? I expect crs return",
+    "answers": [
+      "FLR compliance violation",
+      "Configuration Request Retry Status", 
+      "PCIe Base Specification Section 6.6.1.2",
+      "device not ready",
+      "reset sequence",
+      "100ms minimum",
+      "configuration space blocked"
+    ]
+  },
+  {
+    "question": "What should device return during FLR to configuration reads?",
+    "answers": [
+      "CRS",
+      "Configuration Request Retry Status",
+      "not ready",
+      "retry status",
+      "Section 6.6.1.2"
+    ]
+  },
+  {
+    "question": "PCIe completion timeout causes and debug steps",
+    "answers": [
+      "non-posted request",
+      "target device",
+      "Device Control 2 Register", 
+      "timeout value",
+      "completion packet",
+      "credit exhaustion",
+      "routing problems"
+    ]
+  },
+  {
+    "question": "LTSSM stuck in Polling.Compliance state causes",
+    "answers": [
+      "electrical",
+      "link training",
+      "speed negotiation",
+      "receiver detection", 
+      "compliance pattern",
+      "training sequence",
+      "LTSSM"
+    ]
+  },
+  {
+    "question": "PCIe TLP header format for 3DW memory read",
+    "answers": [
+      "3DW",
+      "Fmt[2:0]",
+      "Type[4:0]",
+      "Length[9:0]",
+      "Address[31:2]",
+      "memory request",
+      "transaction layer"
+    ]
+  },
+  {
+    "question": "AER correctable error reporting configuration",
+    "answers": [
+      "AER capability",
+      "Correctable Error Status",
+      "mask register",
+      "error reporting",
+      "Root Port",
+      "Advanced Error Reporting",
+      "Cap ID 0x01"
+    ]
+  },
+  {
+    "question": "PCIe ASPM L1 entry conditions and requirements",
+    "answers": [
+      "L1",
+      "power management",
+      "link partners", 
+      "Link Control Register",
+      "electrical idle",
+      "ASPM",
+      "power savings"
+    ]
+  },
+  {
+    "question": "PCIe configuration space access during device reset",
+    "answers": [
+      "configuration space",
+      "device reset",
+      "access blocked",
+      "reset state",
+      "ready signal"
+    ]
+  },
+  {
+    "question": "Flow control credit mechanism in PCIe",
+    "answers": [
+      "flow control",
+      "credit",
+      "posted",
+      "non-posted",
+      "completion",
+      "DLLP",
+      "buffer"
+    ]
+  },
+  {
+    "question": "PCIe hot reset vs function level reset differences",
+    "answers": [
+      "hot reset",
+      "function level reset",
+      "FLR",
+      "reset type",
+      "reset scope",
+      "link training"
+    ]
+  },
+  {
+    "question": "PCIe error recovery mechanisms and procedures",
+    "answers": [
+      "error recovery",
+      "recovery state",
+      "LTSSM",
+      "error handling",
+      "link recovery",
+      "retry mechanism"
+    ]
+  },
+  {
+    "question": "PCIe speed negotiation process during link training",
+    "answers": [
+      "speed negotiation",
+      "link training",
+      "generation",
+      "data rate",
+      "training sequence",
+      "speed change"
+    ]
+  }
+]
