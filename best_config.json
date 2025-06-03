@@ -1,0 +1,22 @@
+{
+  "chunking_strategy": "fixed",
+  "base_chunk_size": 512,
+  "overlap_ratio": 0.1,
+  "dynamic_split_thresh": 192,
+  "add_meta_fields": [
+    "page",
+    "file",
+    "heading"
+  ],
+  "length_penalty": 0.05,
+  "retriever_type": "bm25",
+  "hybrid_weight": 0.31,
+  "hierarchical_mode": false,
+  "rerank_model": "none",
+  "max_total_ctx_tokens": 1024,
+  "evolution_metadata": {
+    "generation": 1,
+    "best_score": 0.7079257393640186,
+    "timestamp": "2025-06-03T15:17:38.283446"
+  }
+}
