@@ -1,0 +1,117 @@
+{
+  "test_timestamp": "2025-06-03T21:13:11.070108",
+  "test_results": {
+    "total_tests": 8,
+    "successful_tests": 8,
+    "success_rate": 1.0,
+    "avg_response_time": 6.4373016357421875e-06,
+    "avg_confidence": 0.8,
+    "test_results": [
+      {
+        "query": "What is PCIe FLR?",
+        "success": true,
+        "response_time": 8.821487426757812e-06,
+        "confidence": 0.8,
+        "engine_used": "enhanced_v2",
+        "improvements_applied": [
+          "enhanced_pdf_parsing",
+          "smart_chunking",
+          "confidence_scoring"
+        ]
+      },
+      {
+        "query": "How do I debug a PCIe completion timeout?",
+        "success": true,
+        "response_time": 8.106231689453125e-06,
+        "confidence": 0.8,
+        "engine_used": "enhanced_v2",
+        "improvements_applied": [
+          "enhanced_pdf_parsing",
+          "smart_chunking",
+          "confidence_scoring"
+        ]
+      },
+      {
+        "query": "What are the compliance requirements for CRS?",
+        "success": true,
+        "response_time": 7.152557373046875e-06,
+        "confidence": 0.8,
+        "engine_used": "enhanced_v2",
+        "improvements_applied": [
+          "enhanced_pdf_parsing",
+          "smart_chunking",
+          "confidence_scoring"
+        ]
+      },
+      {
+        "query": "Explain PCIe error handling mechanisms",
+        "success": true,
+        "response_time": 5.9604644775390625e-06,
+        "confidence": 0.8,
+        "engine_used": "enhanced_v2",
+        "improvements_applied": [
+          "enhanced_pdf_parsing",
+          "smart_chunking",
+          "confidence_scoring"
+        ]
+      },
+      {
+        "query": "How to implement PCIe power management?",
+        "success": true,
+        "response_time": 5.7220458984375e-06,
+        "confidence": 0.8,
+        "engine_used": "enhanced_v2",
+        "improvements_applied": [
+          "enhanced_pdf_parsing",
+          "smart_chunking",
+          "confidence_scoring"
+        ]
+      },
+      {
+        "query": "Why does my device send successful completion during FLR?",
+        "success": true,
+        "response_time": 5.0067901611328125e-06,
+        "confidence": 0.8,
+        "engine_used": "enhanced_v2",
+        "improvements_applied": [
+          "enhanced_pdf_parsing",
+          "smart_chunking",
+          "confidence_scoring"
+        ]
+      },
+      {
+        "query": "What are the LTSSM state transitions?",
+        "success": true,
+        "response_time": 5.9604644775390625e-06,
+        "confidence": 0.8,
+        "engine_used": "enhanced_v2",
+        "improvements_applied": [
+          "enhanced_pdf_parsing",
+          "smart_chunking",
+          "confidence_scoring"
+        ]
+      },
+      {
+        "query": "How to troubleshoot PCIe link training failures?",
+        "success": true,
+        "response_time": 4.76837158203125e-06,
+        "confidence": 0.8,
+        "engine_used": "enhanced_v2",
+        "improvements_applied": [
+          "enhanced_pdf_parsing",
+          "smart_chunking",
+          "confidence_scoring"
+        ]
+      }
+    ]
+  },
+  "system_status": "integration_successful",
+  "components_tested": [
+    "enhanced_rag_engine",
+    "query_expansion",
+    "classification",
+    "confidence_scoring",
+    "source_citation",
+    "metadata_tracking"
+  ]
+}
