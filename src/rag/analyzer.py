@@ -40,16 +40,101 @@ class Analyzer:
         Returns:
             Analysis response string
         """
-        prompt = f"""You are a PCIe debugging expert. Based on the following context, answer the user's query.
+        # Create analysis-specific prompt based on analysis_type
+        if analysis_type == "error_analysis":
+            prompt = f"""You are a PCIe debugging expert specializing in error analysis. 
 
-Query: {query}
+QUERY: {query}
 
-Context:
+CONTEXT FROM KNOWLEDGE BASE:
 {context}
 
-Please provide a detailed technical answer based on the context provided."""
+ANALYSIS INSTRUCTIONS:
+1. Focus specifically on the technical issue described in the query
+2. Identify any PCIe compliance violations or protocol errors
+3. Explain expected vs actual behavior for the specific scenario
+4. Provide concrete debugging steps for this exact issue
+5. Reference relevant PCIe specification sections if applicable
 
-        return self._call_llm(prompt)
+Provide a focused, technical answer addressing the specific PCIe issue."""
+        
+        elif analysis_type == "debug_analysis":
+            prompt = f"""You are a PCIe debugging expert. Provide specific debugging guidance.
+
+PROBLEM: {query}
+
+KNOWLEDGE BASE CONTEXT:
+{context}
+
+DEBUGGING FOCUS:
+- Identify root cause of the specific issue
+- Explain why the observed behavior occurs
+- Provide step-by-step debugging approach
+- Suggest specific register checks or log analysis
+- Reference PCIe protocol requirements
+
+Answer with specific debugging guidance for this exact scenario."""
+        
+        elif analysis_type == "compliance_analysis":
+            prompt = f"""You are a PCIe compliance expert. Analyze the compliance issue.
+
+COMPLIANCE QUESTION: {query}
+
+RELEVANT STANDARDS:
+{context}
+
+COMPLIANCE ANALYSIS:
+- Identify specific PCIe specification requirements
+- Explain compliance violations if any
+- Detail expected protocol behavior
+- Provide compliance verification steps
+
+Focus on PCIe specification compliance for this specific scenario."""
+        
+        else:
+            # Default technical analysis prompt
+            prompt = f"""You are a PCIe technical expert. Provide detailed technical analysis.
+
+TECHNICAL QUERY: {query}
+
+RELEVANT DOCUMENTATION:
+{context}
+
+Provide a comprehensive technical explanation focusing on:
+1. The specific PCIe concept or mechanism involved
+2. Technical details and protocol behavior
+3. Implementation considerations
+4. Common issues and troubleshooting tips
+
+Answer with precise technical details for this query."""
+
+        try:
+            return self._call_llm(prompt)
+        except Exception as e:
+            logger.warning(f"LLM call failed for analysis: {e}")
+            # Provide fallback analysis based on context
+            return self._create_fallback_analysis(query, context, analysis_type)
+    
+    def _create_fallback_analysis(self, query: str, context: str, analysis_type: str) -> str:
+        """Create fallback analysis when LLM is unavailable"""
+        if not context.strip():
+            return f"No relevant information found for query: '{query}'. Please check knowledge base."
+        
+        fallback = f"Analysis for: {query}\n\n"
+        fallback += "Based on available knowledge base content:\n\n"
+        
+        # Extract key information from context
+        context_lines = context.split('\n')
+        relevant_lines = [line for line in context_lines if line.strip() and not line.startswith('[Source')]
+        
+        if relevant_lines:
+            fallback += "Key findings:\n"
+            for i, line in enumerate(relevant_lines[:5], 1):
+                if len(line.strip()) > 20:  # Skip very short lines
+                    fallback += f"{i}. {line.strip()}\n"
+        
+        fallback += f"\n💡 Note: This is a basic analysis. For detailed technical analysis, please configure an LLM model."
+        return fallback
             
     def analyze_error(self,
                      error: 'UVMError',
