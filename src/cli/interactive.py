@@ -18,6 +18,7 @@ from src.models.model_selector import get_model_selector
 from src.models.embedding_selector import get_embedding_selector
 from src.vectorstore.faiss_store import FAISSVectorStore
 from src.rag.enhanced_rag_engine import EnhancedRAGEngine
+from src.rag.enhanced_rag_engine_v3 import EnhancedRAGEngineV3, EnhancedRAGQuery, EnhancedRAGResponse
 from src.config.settings import load_settings
 from src.cli.utils.output import print_success, print_error, print_info, print_warning
 from src.cli.utils.token_counter import TokenCounter
@@ -162,10 +163,28 @@ Type your PCIe questions directly or use slash commands.
                 if embedding_dim == vector_db_dim:
                     self.model_wrapper = ModelWrapper(self.model_selector, self.embedding_selector, rag_enabled=True)
                     self.model_manager = self.model_wrapper  # Set model_manager for unified RAG
-                    self.rag_engine = EnhancedRAGEngine(
-                        vector_store=self.vector_store,
-                        model_manager=self.model_wrapper
-                    )
+                    
+                    # Initialize Enhanced RAG Engine v3 with fallback to original
+                    try:
+                        self.rag_engine_v3 = EnhancedRAGEngineV3(
+                            vector_store=self.vector_store,
+                            model_manager=self.model_wrapper,
+                            use_hybrid_search=True
+                        )
+                        self.rag_engine = self.rag_engine_v3
+                        self.rag_version = "v3"
+                        if self.verbose:
+                            print("🚀 Enhanced RAG Engine v3 initialized")
+                    except Exception as e:
+                        # Fallback to original RAG engine
+                        self.rag_engine = EnhancedRAGEngine(
+                            vector_store=self.vector_store,
+                            model_manager=self.model_wrapper
+                        )
+                        self.rag_engine_v3 = None
+                        self.rag_version = "v1"
+                        if self.verbose:
+                            print(f"⚠️  Using original RAG engine (v3 failed: {e})")
                 else:
                     # Dimension mismatch - disable RAG
                     print_warning(f"⚠️  Dimension mismatch detected!")
@@ -312,9 +331,28 @@ Type your PCIe questions directly or use slash commands.
             modes = ["semantic", "hybrid", "keyword", "unified"]
             matches = [mode for mode in modes if mode.startswith(text)]
         
-        elif cmd_name in ['rag_files', 'rag_check']:
+        elif cmd_name in ['rag_files', 'rag_check', 'rag_v3_status']:
             # No arguments needed for these commands
             matches = []
+        
+        elif cmd_name in ['rag_analyze', 'rag_verify']:
+            # Suggest common PCIe query starters
+            suggestions = [
+                "What is the 3DW Memory Request TLP header format?",
+                "List all PCIe LTSSM states with timeouts",
+                "How does PCIe flow control work?",
+                "What are PCIe power states?",
+                "Explain AER capability registers"
+            ]
+            matches = [s for s in suggestions if s.lower().startswith(text.lower())]
+        
+        elif cmd_name == 'suggest':
+            # Suggest PCIe concept keywords
+            concepts = [
+                "ltssm", "tlp", "power", "error", "aer", "config", "flow", 
+                "header", "register", "timeout", "memory", "completion"
+            ]
+            matches = [c for c in concepts if c.startswith(text.lower())]
         
         elif cmd_name == 'rag':
             options = ["on", "off"]
@@ -395,6 +433,10 @@ Available Commands:
   /kb                  Alias for /knowledge_base
   /rag_files           Show which files are indexed in each RAG database
   /rag_check           Quick check of current RAG database readiness
+  /rag_analyze <query> Enhanced RAG v3 comprehensive analysis
+  /rag_verify <query>  Test answer verification system
+  /rag_v3_status       Show Enhanced RAG v3 status and metrics
+  /suggest <concepts>  Get related question suggestions
   /stream [on/off]     Toggle real-time streaming responses
   /vim                 Enable vim mode
   /exit, /quit         Exit the shell
@@ -1293,10 +1335,22 @@ Please provide a comprehensive analysis."""
                         if hasattr(self.model_wrapper, 'rag_enabled'):
                             self.model_wrapper.rag_enabled = True
                         
-                        self.rag_engine = EnhancedRAGEngine(
-                            vector_store=self.vector_store,
-                            model_manager=self.model_wrapper
-                        )
+                        # Re-initialize with Enhanced RAG v3 with fallback
+                        try:
+                            self.rag_engine_v3 = EnhancedRAGEngineV3(
+                                vector_store=self.vector_store,
+                                model_manager=self.model_wrapper,
+                                use_hybrid_search=True
+                            )
+                            self.rag_engine = self.rag_engine_v3
+                            self.rag_version = "v3"
+                        except Exception as e:
+                            self.rag_engine = EnhancedRAGEngine(
+                                vector_store=self.vector_store,
+                                model_manager=self.model_wrapper
+                            )
+                            self.rag_engine_v3 = None
+                            self.rag_version = "v1"
                         
                         print_success("✅ RAG enabled successfully!")
                         print(f"   Vector store: {self.vector_store.index.ntotal} documents")
@@ -1503,6 +1557,175 @@ Please provide a comprehensive analysis."""
         
         return descriptions.get(filename, "PCIe technical documentation")
     
+    def do_rag_analyze(self, arg):
+        """Analyze query with Enhanced RAG v3 components"""
+        if not arg:
+            print("Usage: /rag_analyze <query>")
+            print("Example: /rag_analyze What is the 3DW Memory Request TLP header format?")
+            return
+        
+        # Input validation
+        if len(arg.strip()) < 3:
+            print("❌ Query must be at least 3 characters long")
+            return
+        
+        if len(arg) > 1000:
+            print("❌ Query too long (max 1000 characters)")
+            return
+        
+        if not self.rag_enabled or not hasattr(self, 'rag_engine_v3') or not self.rag_engine_v3:
+            print("❌ Enhanced RAG v3 not available")
+            return
+        
+        print(f"🔍 Enhanced RAG Analysis: {arg}")
+        print("-" * 50)
+        
+        try:
+            # Use Enhanced RAG v3 for comprehensive analysis
+            rag_query = EnhancedRAGQuery(
+                query=arg,
+                verify_answer=True,
+                normalize_question=True,
+                use_hybrid_search=True
+            )
+            
+            response = self.rag_engine_v3.query(rag_query)
+            
+            # Display comprehensive analysis
+            print(f"\n📝 Answer (Confidence: {response.confidence:.1%}):")
+            print(response.answer)
+            
+            if response.normalized_question:
+                print(f"\n🔄 Question Normalization:")
+                print(f"   Original: {arg}")
+                print(f"   Normalized: {response.normalized_question.normalized_form}")
+                print(f"   Intent: {response.normalized_question.intent.value}")
+                print(f"   Key Concepts: {response.normalized_question.key_concepts}")
+            
+            if response.verification:
+                print(f"\n✅ Answer Verification:")
+                print(f"   Confidence: {response.verification.confidence:.1%}")
+                print(f"   Method: {response.verification.verification_method.value}")
+                print(f"   Explanation: {response.verification.explanation}")
+            
+            if response.knowledge_items:
+                print(f"\n🧠 Knowledge Classification:")
+                for i, item in enumerate(response.knowledge_items[:3]):
+                    print(f"   {i+1}. Category: {item.category.value}")
+                    print(f"      Facts: {len(item.facts)}")
+                    print(f"      Difficulty: {item.difficulty}")
+            
+            if response.suggestions:
+                print(f"\n💡 Related Questions:")
+                for suggestion in response.suggestions[:3]:
+                    print(f"   • {suggestion}")
+                    
+        except Exception as e:
+            print_error(f"Enhanced analysis failed: {e}")
+    
+    def do_rag_v3_status(self, arg):
+        """Show Enhanced RAG Engine v3 status"""
+        print("🚀 Enhanced RAG Engine v3 Status")
+        print("-" * 35)
+        
+        if hasattr(self, 'rag_version'):
+            print(f"RAG Version: {self.rag_version}")
+        
+        if hasattr(self, 'rag_engine_v3') and self.rag_engine_v3:
+            try:
+                status = self.rag_engine_v3.get_system_status()
+                
+                print("📊 Metrics:")
+                metrics = status["metrics"]
+                print(f"   Queries Processed: {metrics['queries_processed']}")
+                print(f"   Avg Response Time: {metrics['average_response_time']:.2f}s")
+                print(f"   Avg Confidence: {metrics['average_confidence']:.1%}")
+                print(f"   Cache Hit Rate: {status['cache_stats']['hit_rate']:.1%}")
+                
+                print("\n🔧 Components:")
+                for comp, state in status["components"].items():
+                    print(f"   {comp}: {state}")
+                
+                print("\n💾 Cache Stats:")
+                cache = status["cache_stats"]
+                print(f"   Size: {cache['size']}/{cache['max_size']}")
+                print(f"   Hit Rate: {cache['hit_rate']:.1%}")
+            except Exception as e:
+                print(f"❌ Status check failed: {e}")
+        else:
+            print("❌ Enhanced RAG Engine v3 not available")
+            print(f"   Current RAG version: {getattr(self, 'rag_version', 'unknown')}")
+    
+    def do_rag_verify(self, arg):
+        """Test answer verification on a specific query"""
+        if not arg:
+            print("Usage: /rag_verify <query>")
+            print("Example: /rag_verify What are PCIe LTSSM states?")
+            return
+        
+        # Input validation
+        if len(arg.strip()) < 3:
+            print("❌ Query must be at least 3 characters long")
+            return
+        
+        if not hasattr(self, 'rag_engine_v3') or not self.rag_engine_v3:
+            print("❌ Enhanced RAG v3 not available")
+            return
+        
+        print(f"✅ Answer Verification Test: {arg}")
+        print("-" * 40)
+        
+        try:
+            rag_query = EnhancedRAGQuery(query=arg, verify_answer=True)
+            response = self.rag_engine_v3.query(rag_query)
+            
+            if response.verification:
+                v = response.verification
+                print(f"Confidence: {v.confidence:.1%}")
+                print(f"Method: {v.verification_method.value}")
+                print(f"Matched Keywords: {v.matched_keywords}")
+                print(f"Missing Keywords: {v.missing_keywords}")
+                print(f"Fact Accuracy: {v.fact_accuracy:.1%}")
+                print(f"Explanation: {v.explanation}")
+            else:
+                print("No verification data available")
+        except Exception as e:
+            print_error(f"Verification test failed: {e}")
+    
+    def do_suggest(self, arg):
+        """Get question suggestions based on concepts"""
+        if not arg:
+            print("Usage: /suggest <concepts>")
+            print("Example: /suggest ltssm power")
+            return
+        
+        # Input validation
+        concepts = arg.split()
+        if len(concepts) == 0:
+            print("❌ Please provide at least one concept")
+            return
+        
+        if len(concepts) > 10:
+            print("❌ Too many concepts (max 10)")
+            return
+        
+        if not hasattr(self, 'rag_engine_v3') or not self.rag_engine_v3:
+            print("❌ Enhanced RAG v3 not available")
+            return
+        
+        concepts = arg.split()
+        try:
+            normalizer = self.rag_engine_v3.question_normalizer
+            suggestions = normalizer.suggest_related_questions(concepts)
+            
+            print(f"💡 Question Suggestions for: {', '.join(concepts)}")
+            print("-" * 40)
+            
+            for i, suggestion in enumerate(suggestions, 1):
+                print(f"{i}. {suggestion}")
+        except Exception as e:
+            print_error(f"Suggestion failed: {e}")
+
     def do_knowledge_base(self, arg):
         """Show current RAG knowledge base content and status"""
         print(f"\n📚 Multi-Model RAG Knowledge Base Status")
@@ -2727,11 +2950,105 @@ Be concise but thorough in your technical analysis."""
         self._process_query(query)
         self.turn_count += 1
     
+    def _process_enhanced_rag_v3_query(self, query: str):
+        """Process query using Enhanced RAG Engine v3"""
+        try:
+            start_time = time.time()
+            
+            # Create enhanced query
+            rag_query = EnhancedRAGQuery(
+                query=query,
+                verify_answer=True,
+                normalize_question=True,
+                use_hybrid_search=True,
+                min_confidence=0.3
+            )
+            
+            # Execute query
+            response = self.rag_engine_v3.query(rag_query)
+            
+            # Display result
+            if self.streaming_enabled:
+                self._stream_enhanced_response(response)
+            else:
+                self._display_enhanced_response(response)
+            
+            # Track metrics
+            processing_time = time.time() - start_time
+            if hasattr(response, 'metadata') and response.metadata:
+                input_tokens = response.metadata.get('input_tokens', 0)
+                output_tokens = response.metadata.get('output_tokens', 0)
+            else:
+                # Estimate tokens
+                input_tokens = len(query.split()) * 1.3
+                output_tokens = len(response.answer.split()) * 1.3
+            
+            self.session_tokens["input"] += int(input_tokens)
+            self.session_tokens["output"] += int(output_tokens)
+            
+            # Add to conversation history
+            self.conversation_history.append({"role": "user", "content": query})
+            self.conversation_history.append({"role": "assistant", "content": response.answer})
+            
+            # Show performance if verbose
+            if self.analysis_verbose:
+                print(f"\n⚡ Enhanced RAG v3 Performance:")
+                print(f"   Processing time: {processing_time:.2f}s")
+                print(f"   Confidence: {response.confidence:.1%}")
+                if response.verification:
+                    print(f"   Verification: {response.verification.verification_method.value}")
+                print(f"   Tokens: {int(input_tokens)} in, {int(output_tokens)} out")
+                
+        except Exception as e:
+            raise Exception(f"Enhanced RAG v3 processing failed: {e}")
+    
+    def _stream_enhanced_response(self, response: EnhancedRAGResponse):
+        """Stream enhanced response with progressive display"""
+        print(f"\n💡 Answer (Confidence: {response.confidence:.1%}):")
+        
+        # Stream the answer
+        words = response.answer.split()
+        for i, word in enumerate(words):
+            print(word, end=' ', flush=True)
+            if i % 10 == 9:  # Add slight pause every 10 words
+                time.sleep(self.stream_delay * 2)
+            else:
+                time.sleep(self.stream_delay)
+        print()  # Final newline
+        
+        # Show additional info if available
+        if response.verification and response.verification.confidence < 0.5:
+            print(f"\n⚠️ Low confidence verification ({response.verification.confidence:.1%})")
+        
+        if response.suggestions and len(response.suggestions) > 0:
+            print(f"\n💡 Related: {response.suggestions[0]}")
+    
+    def _display_enhanced_response(self, response: EnhancedRAGResponse):
+        """Display enhanced response without streaming"""
+        print(f"\n💡 Answer (Confidence: {response.confidence:.1%}):")
+        print(response.answer)
+        
+        if response.verification and response.verification.confidence < 0.5:
+            print(f"\n⚠️ Low confidence verification ({response.verification.confidence:.1%})")
+        
+        if response.suggestions and len(response.suggestions) > 0:
+            print(f"\n💡 Related: {response.suggestions[0]}")
+    
     def _process_query(self, query: str):
         """Process a PCIe debugging query"""
         try:
             model_name = self.model_selector.get_current_model()
             print(f"\n🔍 Analyzing with {model_name}...")
+            
+            # Use Enhanced RAG v3 if available
+            if hasattr(self, 'rag_engine_v3') and self.rag_engine_v3:
+                try:
+                    self._process_enhanced_rag_v3_query(query)
+                    return
+                except Exception as e:
+                    if self.analysis_verbose:
+                        print_warning(f"⚠️ Enhanced RAG v3 failed: {e}")
+                        print_info("   Falling back to standard processing")
             
             start_time = time.time()
             embedding_time = 0
