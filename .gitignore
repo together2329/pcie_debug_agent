@@ -156,3 +156,14 @@ OPENAI_*.md
 
 # Ignore scripts directory (development scripts)
 scripts/ 
+
+# QA system development files
+*_qa_system.py
+*_qa_system.json
+*qa_dataset.json
+*knowledge_items.json
+qa_system_results.json
+verified_pcie_qa_system.json
+generate_pcie_qa.py
+analyze_pcie_knowledge.py
+build_verified_qa_system.py

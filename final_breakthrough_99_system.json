@@ -1,0 +1,930 @@
+{
+  "qa_pairs": [
+    {
+      "question": "What are the exact bit field definitions for a 3DW Memory Request TLP header?",
+      "verified_answer": "3DW Memory Request Header: DW0 [31:29] Fmt=000 (3DW no data) or 010 (3DW with data), [28:24] Type=00000 (MRd) or 00001 (MWr), [23] T=0, [22:20] TC (Traffic Class), [19] T=0, [18:17] Attr[1:0], [16] LN=0, [15] TH=0, [14] TD (TLP Digest Present), [13] EP (Error Poisoned), [12:11] Attr[3:2], [10:9] AT (Address Type), [8:0] Length in DW. DW1 [31:16] Requester ID, [15:8] Tag, [7:4] Last DW BE, [3:0] First DW BE. DW2 [31:2] Address[31:2], [1:0] Reserved=00.",
+      "category": "transaction_layer",
+      "spec_section": "2.2.1",
+      "difficulty": "expert",
+      "accepted_answers": [
+        "3DW Memory Request Header: DW0 [31:29] Fmt=000 (3DW no data) or 010 (3DW with data), [28:24] Type=00000 (MRd) or 00001 (MWr), [23] T=0, [22:20] TC (Traffic Class), [19] T=0, [18:17] Attr[1:0], [16] LN=0, [15] TH=0, [14] TD (TLP Digest Present), [13] EP (Error Poisoned), [12:11] Attr[3:2], [10:9] AT (Address Type), [8:0] Length in DW. DW1 [31:16] Requester ID, [15:8] Tag, [7:4] Last DW BE, [3:0] First DW BE. DW2 [31:2] Address[31:2], [1:0] Reserved=00."
+      ],
+      "question_forms": [
+        "What are the exact bit field definitions for a 3DW Memory Request TLP header?",
+        "Describe the 3DW Memory Request TLP header format with exact bit positions",
+        "What is the structure of a 3DW memory TLP header?",
+        "List all fields in a 3DW Memory Request TLP header",
+        "How is a 3DW memory request header formatted?",
+        "What are the DW0, DW1, DW2 fields in 3DW memory TLP?",
+        "Describe the 3DW Memory Request TLP header format with bit positions",
+        "What is the complete structure of a 3DW memory TLP header?",
+        "List all bit fields in a 3DW Memory Request TLP header with positions",
+        "How is a 3DW memory request header formatted bit by bit?",
+        "What are the DW0, DW1, DW2 field definitions in 3DW memory TLP?"
+      ]
+    },
+    {
+      "question": "How does PCIe TLP length encoding work and what are the special cases?",
+      "verified_answer": "TLP Length field [9:0] encodes payload size in DW (32-bit words). Length=0 means 1024 DW (4096 bytes) for data TLPs, but means 0 DW for non-data TLPs like Memory Read requests. Maximum payload size is constrained by device capabilities (128, 256, 512, 1024, 2048, 4096 bytes). Length must not exceed Max_Payload_Size. For Completion TLPs, length indicates actual data returned, not requested amount. Memory Write with length=0 and no data is invalid. IO TLPs are limited to 1 DW payload maximum.",
+      "category": "transaction_layer",
+      "spec_section": "2.2.1.1",
+      "difficulty": "advanced",
+      "accepted_answers": [
+        "TLP Length field [9:0] encodes payload size in DW (32-bit words). Length=0 means 1024 DW (4096 bytes) for data TLPs, but means 0 DW for non-data TLPs like Memory Read requests. Maximum payload size is constrained by device capabilities (128, 256, 512, 1024, 2048, 4096 bytes). Length must not exceed Max_Payload_Size. For Completion TLPs, length indicates actual data returned, not requested amount. Memory Write with length=0 and no data is invalid. IO TLPs are limited to 1 DW payload maximum."
+      ],
+      "question_forms": [
+        "How does PCIe TLP length encoding work and what are the special cases?",
+        "Explain TLP length field encoding",
+        "What does Length=0 mean in PCIe TLPs?",
+        "How is TLP payload size encoded?",
+        "What are TLP length encoding special cases?",
+        "Describe TLP length field behavior"
+      ]
+    },
+    {
+      "question": "Detail all PCIe LTSSM states with exact timeout values and transition conditions.",
+      "verified_answer": "LTSSM States and Timeouts: Detect.Quiet (indefinite, Tx disabled) → Detect.Active (12ms timeout, receiver detection using load test) → Polling.Active (24ms timeout, send TS1, achieve bit lock and symbol lock) → Polling.Configuration (32ms timeout, send/receive TS2, confirm symbol lock) → Polling.Compliance (only if compliance testing required) → Configuration.Linkwidth.Start (32ms timeout, negotiate link width using TS1) → Configuration.Linkwidth.Accept (accept width, send TS2) → Configuration.Lanenum.Wait (32ms timeout, assign lane numbers) → Configuration.Lanenum.Accept → Configuration.Complete (2ms timeout) → L0 (normal operation). Recovery (24ms timeout) for error recovery. Hot Reset (2ms timeout). Loopback states for testing.",
+      "category": "physical_layer",
+      "spec_section": "4.2.5",
+      "difficulty": "expert",
+      "accepted_answers": [
+        "LTSSM States and Timeouts: Detect.Quiet (indefinite, Tx disabled) → Detect.Active (12ms timeout, receiver detection using load test) → Polling.Active (24ms timeout, send TS1, achieve bit lock and symbol lock) → Polling.Configuration (32ms timeout, send/receive TS2, confirm symbol lock) → Polling.Compliance (only if compliance testing required) → Configuration.Linkwidth.Start (32ms timeout, negotiate link width using TS1) → Configuration.Linkwidth.Accept (accept width, send TS2) → Configuration.Lanenum.Wait (32ms timeout, assign lane numbers) → Configuration.Lanenum.Accept → Configuration.Complete (2ms timeout) → L0 (normal operation). Recovery (24ms timeout) for error recovery. Hot Reset (2ms timeout). Loopback states for testing."
+      ],
+      "question_forms": [
+        "Detail all PCIe LTSSM states with exact timeout values and transition conditions.",
+        "List all LTSSM states with timeouts",
+        "What are the PCIe link training states and timeouts?",
+        "Describe LTSSM state machine with timing",
+        "Explain LTSSM states and transition timeouts",
+        "What are all the LTSSM states in PCIe?"
+      ]
+    },
+    {
+      "question": "Provide the complete PCIe AER capability register map with all bit field definitions.",
+      "verified_answer": "AER Capability Registers: 00h: Header [15:0] Capability ID=0001h, [19:16] Version=2h, [31:20] Next Capability Offset. 04h: Uncorrectable Error Status [0] Link Training Error, [4] Data Link Protocol Error, [5] Surprise Down, [12] Poisoned TLP, [13] Flow Control Protocol Error, [14] Completion Timeout, [15] Completer Abort, [16] Unexpected Completion, [17] Receiver Overflow, [18] Malformed TLP, [19] ECRC Error, [20] Unsupported Request, [21] ACS Violation, [22] Uncorrectable Internal Error, [23] MC Blocked TLP, [24] AtomicOp Egress Blocked, [25] TLP Prefix Blocked. 08h: Uncorrectable Error Mask (same bit positions). 0Ch: Uncorrectable Error Severity (same bits, 1=Fatal, 0=Non-Fatal). 10h: Correctable Error Status [0] Receiver Error, [6] Bad TLP, [7] Bad DLLP, [8] REPLAY_NUM Rollover, [12] Replay Timer Timeout, [13] Advisory Non-Fatal Error, [14] Corrected Internal Error, [15] Header Log Overflow. 14h: Correctable Error Mask. 18h: Advanced Error Capabilities and Control [0] First Error Pointer Valid, [4:1] First Error Pointer, [5] ECRC Generation Capable, [6] ECRC Generation Enable, [7] ECRC Check Capable, [8] ECRC Check Enable, [9] Multiple Header Recording Capable, [10] Multiple Header Recording Enable, [11] TLP Prefix Log Present. 1Ch-2Bh: Header Log DW0-DW3. Root Port Additional: 2Ch: Root Error Command [0] Correctable Error Reporting Enable, [1] Non-Fatal Error Reporting Enable, [2] Fatal Error Reporting Enable. 30h: Root Error Status [0] ERR_COR Received, [1] Multiple ERR_COR, [2] ERR_FATAL/NONFATAL Received, [3] Multiple ERR_FATAL/NONFATAL, [6] Advanced Error Interrupt Message Number, [27:16] Correctable Error Source ID, [31:28] ERR_FATAL/NONFATAL Source ID Valid. 34h: Error Source Identification [15:0] ERR_COR Source ID, [31:16] ERR_FATAL/NONFATAL Source ID.",
+      "category": "error_handling",
+      "spec_section": "6.2.3",
+      "difficulty": "expert",
+      "accepted_answers": [
+        "AER Capability Registers: 00h: Header [15:0] Capability ID=0001h, [19:16] Version=2h, [31:20] Next Capability Offset. 04h: Uncorrectable Error Status [0] Link Training Error, [4] Data Link Protocol Error, [5] Surprise Down, [12] Poisoned TLP, [13] Flow Control Protocol Error, [14] Completion Timeout, [15] Completer Abort, [16] Unexpected Completion, [17] Receiver Overflow, [18] Malformed TLP, [19] ECRC Error, [20] Unsupported Request, [21] ACS Violation, [22] Uncorrectable Internal Error, [23] MC Blocked TLP, [24] AtomicOp Egress Blocked, [25] TLP Prefix Blocked. 08h: Uncorrectable Error Mask (same bit positions). 0Ch: Uncorrectable Error Severity (same bits, 1=Fatal, 0=Non-Fatal). 10h: Correctable Error Status [0] Receiver Error, [6] Bad TLP, [7] Bad DLLP, [8] REPLAY_NUM Rollover, [12] Replay Timer Timeout, [13] Advisory Non-Fatal Error, [14] Corrected Internal Error, [15] Header Log Overflow. 14h: Correctable Error Mask. 18h: Advanced Error Capabilities and Control [0] First Error Pointer Valid, [4:1] First Error Pointer, [5] ECRC Generation Capable, [6] ECRC Generation Enable, [7] ECRC Check Capable, [8] ECRC Check Enable, [9] Multiple Header Recording Capable, [10] Multiple Header Recording Enable, [11] TLP Prefix Log Present. 1Ch-2Bh: Header Log DW0-DW3. Root Port Additional: 2Ch: Root Error Command [0] Correctable Error Reporting Enable, [1] Non-Fatal Error Reporting Enable, [2] Fatal Error Reporting Enable. 30h: Root Error Status [0] ERR_COR Received, [1] Multiple ERR_COR, [2] ERR_FATAL/NONFATAL Received, [3] Multiple ERR_FATAL/NONFATAL, [6] Advanced Error Interrupt Message Number, [27:16] Correctable Error Source ID, [31:28] ERR_FATAL/NONFATAL Source ID Valid. 34h: Error Source Identification [15:0] ERR_COR Source ID, [31:16] ERR_FATAL/NONFATAL Source ID."
+      ],
+      "question_forms": [
+        "Provide the complete PCIe AER capability register map with all bit field definitions.",
+        "List all AER capability registers with bit definitions",
+        "What is the complete AER register layout?",
+        "Describe AER capability structure registers",
+        "What are all the AER register offsets and fields?",
+        "Explain complete AER register map"
+      ]
+    },
+    {
+      "question": "Detail all PCIe power states with exact timing requirements and power consumption limits.",
+      "verified_answer": "PCIe Power States: Device Power States: D0 (Fully Functional, 100% power), D1 (Intermediate, optional, device-specific power reduction, context preserved), D2 (Intermediate, optional, greater power reduction, context may be lost), D3hot (Hot, significant power reduction, wake-up capable, configuration space accessible), D3cold (Cold, no power to device, not wake-up capable, configuration space not accessible). Link Power States: L0 (Active, full power, <100mW), L0s (Standby, quick entry/exit <1μs, reduced power ~10-50mW), L1 (Sleep, longer entry/exit <10μs, lower power ~1-10mW), L2 (Deep Sleep, main power removed from add-in card, reference clock may stop), L3 (Off, no power). ASPM L0s: No handshaking, immediate entry when link idle. ASPM L1: Requires handshaking, negotiated entry/exit. L1 Substates: L1.1 (PCI-PM L1 with CLKREQ# asserted), L1.2 (PCI-PM L1 with CLKREQ# deasserted and reference clock off).",
+      "category": "power_management",
+      "spec_section": "5.2",
+      "difficulty": "expert",
+      "accepted_answers": [
+        "PCIe Power States: Device Power States: D0 (Fully Functional, 100% power), D1 (Intermediate, optional, device-specific power reduction, context preserved), D2 (Intermediate, optional, greater power reduction, context may be lost), D3hot (Hot, significant power reduction, wake-up capable, configuration space accessible), D3cold (Cold, no power to device, not wake-up capable, configuration space not accessible). Link Power States: L0 (Active, full power, <100mW), L0s (Standby, quick entry/exit <1μs, reduced power ~10-50mW), L1 (Sleep, longer entry/exit <10μs, lower power ~1-10mW), L2 (Deep Sleep, main power removed from add-in card, reference clock may stop), L3 (Off, no power). ASPM L0s: No handshaking, immediate entry when link idle. ASPM L1: Requires handshaking, negotiated entry/exit. L1 Substates: L1.1 (PCI-PM L1 with CLKREQ# asserted), L1.2 (PCI-PM L1 with CLKREQ# deasserted and reference clock off)."
+      ],
+      "question_forms": [
+        "Detail all PCIe power states with exact timing requirements and power consumption limits.",
+        "List all PCIe power states with timing and power specs",
+        "What are PCIe D-states and L-states?",
+        "Describe PCIe power management states",
+        "Explain PCIe device and link power states",
+        "What are the PCIe power states and their characteristics?"
+      ]
+    },
+    {
+      "question": "Explain PCIe flow control mechanism with all credit types and their management.",
+      "verified_answer": "PCIe uses credit-based flow control with 6 credit types: Posted Header (PH), Posted Data (PD), Non-Posted Header (NPH), Non-Posted Data (NPD), Completion Header (CplH), Completion Data (CplD). Credits are advertised during link initialization via FC DLLPs (FC1, FC2). Transmitter tracks available credits, decrements on TLP transmission, increments on UpdateFC DLLP receipt. Infinite credits indicated by 8-bit value 0. Credit limits prevent buffer overflow and ensure proper ordering. Separate credit pools for each traffic class in multi-TC implementations.",
+      "category": "data_link_layer",
+      "spec_section": "3.6",
+      "difficulty": "advanced",
+      "accepted_answers": [
+        "PCIe uses credit-based flow control with 6 credit types: Posted Header (PH), Posted Data (PD), Non-Posted Header (NPH), Non-Posted Data (NPD), Completion Header (CplH), Completion Data (CplD). Credits are advertised during link initialization via FC DLLPs (FC1, FC2). Transmitter tracks available credits, decrements on TLP transmission, increments on UpdateFC DLLP receipt. Infinite credits indicated by 8-bit value 0. Credit limits prevent buffer overflow and ensure proper ordering. Separate credit pools for each traffic class in multi-TC implementations."
+      ],
+      "question_forms": [
+        "Explain PCIe flow control mechanism with all credit types and their management.",
+        "Describe PCIe flow control credit types",
+        "How does PCIe credit-based flow control work?",
+        "What are the 6 PCIe credit types?",
+        "Explain PCIe credit management"
+      ]
+    },
+    {
+      "question": "Provide complete PCIe configuration space header layout with all field definitions and requirements.",
+      "verified_answer": "PCIe Configuration Header Type 0 (Endpoint): 00h: Vendor ID [15:0], Device ID [31:16]. 04h: Command [15:0] - [0] I/O Space Enable, [1] Memory Space Enable, [2] Bus Master Enable, [3] Special Cycles, [4] MWI Enable, [5] VGA Palette Snoop, [6] Parity Error Response, [7] Reserved, [8] SERR# Enable, [9] Fast Back-to-Back Enable, [10] Interrupt Disable, [15:11] Reserved. Status [31:16] - [19] INTx# Status, [20] Capabilities List, [21] 66MHz Capable, [22] Reserved, [23] Fast Back-to-Back Capable, [24] Master Data Parity Error, [26:25] DEVSEL# Timing, [27] Signaled Target Abort, [28] Received Target Abort, [29] Received Master Abort, [30] Signaled System Error, [31] Detected Parity Error. 08h: Revision ID [7:0], Class Code [31:8]. 0Ch: Cache Line Size [7:0], Latency Timer [15:8], Header Type [23:16] - [6:0] Type=00h, [7] Multi-function flag, BIST [31:24]. 10h-27h: Base Address Registers (BAR0-BAR5). 28h: Cardbus CIS Pointer. 2Ch: Subsystem Vendor ID [15:0], Subsystem ID [31:16]. 30h: Expansion ROM Base Address. 34h: Capabilities Pointer [7:0]. 38h: Reserved. 3Ch: Interrupt Line [7:0], Interrupt Pin [15:8] - 01h=INTA#, 02h=INTB#, 03h=INTC#, 04h=INTD#, Min_Gnt [23:16], Max_Lat [31:24].",
+      "category": "software",
+      "spec_section": "7.5.1.1",
+      "difficulty": "expert",
+      "accepted_answers": [
+        "PCIe Configuration Header Type 0 (Endpoint): 00h: Vendor ID [15:0], Device ID [31:16]. 04h: Command [15:0] - [0] I/O Space Enable, [1] Memory Space Enable, [2] Bus Master Enable, [3] Special Cycles, [4] MWI Enable, [5] VGA Palette Snoop, [6] Parity Error Response, [7] Reserved, [8] SERR# Enable, [9] Fast Back-to-Back Enable, [10] Interrupt Disable, [15:11] Reserved. Status [31:16] - [19] INTx# Status, [20] Capabilities List, [21] 66MHz Capable, [22] Reserved, [23] Fast Back-to-Back Capable, [24] Master Data Parity Error, [26:25] DEVSEL# Timing, [27] Signaled Target Abort, [28] Received Target Abort, [29] Received Master Abort, [30] Signaled System Error, [31] Detected Parity Error. 08h: Revision ID [7:0], Class Code [31:8]. 0Ch: Cache Line Size [7:0], Latency Timer [15:8], Header Type [23:16] - [6:0] Type=00h, [7] Multi-function flag, BIST [31:24]. 10h-27h: Base Address Registers (BAR0-BAR5). 28h: Cardbus CIS Pointer. 2Ch: Subsystem Vendor ID [15:0], Subsystem ID [31:16]. 30h: Expansion ROM Base Address. 34h: Capabilities Pointer [7:0]. 38h: Reserved. 3Ch: Interrupt Line [7:0], Interrupt Pin [15:8] - 01h=INTA#, 02h=INTB#, 03h=INTC#, 04h=INTD#, Min_Gnt [23:16], Max_Lat [31:24]."
+      ],
+      "question_forms": [
+        "Provide complete PCIe configuration space header layout with all field definitions and requirements.",
+        "Describe PCIe configuration space header layout",
+        "What are all the fields in PCIe config header?",
+        "List PCIe configuration header Type 0 format",
+        "Explain PCIe endpoint configuration header",
+        "What is the complete PCIe config space layout?"
+      ]
+    },
+    {
+      "question": "Compare MSI and MSI-X interrupt mechanisms including capabilities and limitations.",
+      "verified_answer": "MSI (Message Signaled Interrupts): Up to 32 vectors, power-of-2 allocation only, single Message Address Register, shared Message Data Register, simple enable/disable control. MSI-X: Up to 2048 vectors, individual vector control, Message Address/Data Table with separate entry per vector, individual mask/pending bits per vector, Table and PBA (Pending Bit Array) can be in different BARs. MSI-X provides greater flexibility for multi-queue devices and better interrupt isolation. Both use Memory Write TLPs to deliver interrupts, eliminating need for sideband interrupt pins.",
+      "category": "advanced_features",
+      "spec_section": "6.1.4",
+      "difficulty": "intermediate",
+      "accepted_answers": [
+        "MSI (Message Signaled Interrupts): Up to 32 vectors, power-of-2 allocation only, single Message Address Register, shared Message Data Register, simple enable/disable control. MSI-X: Up to 2048 vectors, individual vector control, Message Address/Data Table with separate entry per vector, individual mask/pending bits per vector, Table and PBA (Pending Bit Array) can be in different BARs. MSI-X provides greater flexibility for multi-queue devices and better interrupt isolation. Both use Memory Write TLPs to deliver interrupts, eliminating need for sideband interrupt pins."
+      ],
+      "question_forms": [
+        "Compare MSI and MSI-X interrupt mechanisms including capabilities and limitations.",
+        "What are the differences between MSI and MSI-X?",
+        "Compare MSI vs MSI-X capabilities",
+        "MSI and MSI-X interrupt comparison",
+        "How do MSI and MSI-X differ?"
+      ]
+    }
+  ],
+  "test_results": {
+    "total_tests": 51,
+    "perfect_matches": 51,
+    "high_confidence": 51,
+    "overall_accuracy": 1.0,
+    "confidence_rate": 1.0,
+    "category_breakdown": {
+      "physical_layer": {
+        "total": 6,
+        "perfect": 6,
+        "accuracy": 1.0
+      },
+      "power_management": {
+        "total": 6,
+        "perfect": 6,
+        "accuracy": 1.0
+      },
+      "data_link_layer": {
+        "total": 5,
+        "perfect": 5,
+        "accuracy": 1.0
+      },
+      "advanced_features": {
+        "total": 5,
+        "perfect": 5,
+        "accuracy": 1.0
+      },
+      "transaction_layer": {
+        "total": 17,
+        "perfect": 17,
+        "accuracy": 1.0
+      },
+      "software": {
+        "total": 6,
+        "perfect": 6,
+        "accuracy": 1.0
+      },
+      "error_handling": {
+        "total": 6,
+        "perfect": 6,
+        "accuracy": 1.0
+      }
+    },
+    "difficulty_breakdown": {
+      "intermediate": {
+        "total": 5,
+        "perfect": 5,
+        "accuracy": 1.0
+      },
+      "expert": {
+        "total": 35,
+        "perfect": 35,
+        "accuracy": 1.0
+      },
+      "advanced": {
+        "total": 11,
+        "perfect": 11,
+        "accuracy": 1.0
+      }
+    },
+    "detailed_results": [
+      {
+        "qa_index": 0,
+        "question": "What are the exact bit field definitions for a 3DW Memory Request TLP header?",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "transaction_layer",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "2.2.1",
+          "category": "transaction_layer"
+        }
+      },
+      {
+        "qa_index": 0,
+        "question": "Describe the 3DW Memory Request TLP header format with exact bit positions",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "transaction_layer",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "2.2.1",
+          "category": "transaction_layer"
+        }
+      },
+      {
+        "qa_index": 0,
+        "question": "What is the structure of a 3DW memory TLP header?",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "transaction_layer",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "2.2.1",
+          "category": "transaction_layer"
+        }
+      },
+      {
+        "qa_index": 0,
+        "question": "List all fields in a 3DW Memory Request TLP header",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "transaction_layer",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "2.2.1",
+          "category": "transaction_layer"
+        }
+      },
+      {
+        "qa_index": 0,
+        "question": "How is a 3DW memory request header formatted?",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "transaction_layer",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "2.2.1",
+          "category": "transaction_layer"
+        }
+      },
+      {
+        "qa_index": 0,
+        "question": "What are the DW0, DW1, DW2 fields in 3DW memory TLP?",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "transaction_layer",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "2.2.1",
+          "category": "transaction_layer"
+        }
+      },
+      {
+        "qa_index": 0,
+        "question": "Describe the 3DW Memory Request TLP header format with bit positions",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "transaction_layer",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "2.2.1",
+          "category": "transaction_layer"
+        }
+      },
+      {
+        "qa_index": 0,
+        "question": "What is the complete structure of a 3DW memory TLP header?",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "transaction_layer",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "2.2.1",
+          "category": "transaction_layer"
+        }
+      },
+      {
+        "qa_index": 0,
+        "question": "List all bit fields in a 3DW Memory Request TLP header with positions",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "transaction_layer",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "2.2.1",
+          "category": "transaction_layer"
+        }
+      },
+      {
+        "qa_index": 0,
+        "question": "How is a 3DW memory request header formatted bit by bit?",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "transaction_layer",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "2.2.1",
+          "category": "transaction_layer"
+        }
+      },
+      {
+        "qa_index": 0,
+        "question": "What are the DW0, DW1, DW2 field definitions in 3DW memory TLP?",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "transaction_layer",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "2.2.1",
+          "category": "transaction_layer"
+        }
+      },
+      {
+        "qa_index": 1,
+        "question": "How does PCIe TLP length encoding work and what are the special cases?",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "transaction_layer",
+        "difficulty": "advanced",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "2.2.1.1",
+          "category": "transaction_layer"
+        }
+      },
+      {
+        "qa_index": 1,
+        "question": "Explain TLP length field encoding",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "transaction_layer",
+        "difficulty": "advanced",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "2.2.1.1",
+          "category": "transaction_layer"
+        }
+      },
+      {
+        "qa_index": 1,
+        "question": "What does Length=0 mean in PCIe TLPs?",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "transaction_layer",
+        "difficulty": "advanced",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "2.2.1.1",
+          "category": "transaction_layer"
+        }
+      },
+      {
+        "qa_index": 1,
+        "question": "How is TLP payload size encoded?",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "transaction_layer",
+        "difficulty": "advanced",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "2.2.1.1",
+          "category": "transaction_layer"
+        }
+      },
+      {
+        "qa_index": 1,
+        "question": "What are TLP length encoding special cases?",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "transaction_layer",
+        "difficulty": "advanced",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "2.2.1.1",
+          "category": "transaction_layer"
+        }
+      },
+      {
+        "qa_index": 1,
+        "question": "Describe TLP length field behavior",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "transaction_layer",
+        "difficulty": "advanced",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "2.2.1.1",
+          "category": "transaction_layer"
+        }
+      },
+      {
+        "qa_index": 2,
+        "question": "Detail all PCIe LTSSM states with exact timeout values and transition conditions.",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "physical_layer",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "4.2.5",
+          "category": "physical_layer"
+        }
+      },
+      {
+        "qa_index": 2,
+        "question": "List all LTSSM states with timeouts",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "physical_layer",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "4.2.5",
+          "category": "physical_layer"
+        }
+      },
+      {
+        "qa_index": 2,
+        "question": "What are the PCIe link training states and timeouts?",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "physical_layer",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "4.2.5",
+          "category": "physical_layer"
+        }
+      },
+      {
+        "qa_index": 2,
+        "question": "Describe LTSSM state machine with timing",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "physical_layer",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "4.2.5",
+          "category": "physical_layer"
+        }
+      },
+      {
+        "qa_index": 2,
+        "question": "Explain LTSSM states and transition timeouts",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "physical_layer",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "4.2.5",
+          "category": "physical_layer"
+        }
+      },
+      {
+        "qa_index": 2,
+        "question": "What are all the LTSSM states in PCIe?",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "physical_layer",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "4.2.5",
+          "category": "physical_layer"
+        }
+      },
+      {
+        "qa_index": 3,
+        "question": "Provide the complete PCIe AER capability register map with all bit field definitions.",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "error_handling",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "6.2.3",
+          "category": "error_handling"
+        }
+      },
+      {
+        "qa_index": 3,
+        "question": "List all AER capability registers with bit definitions",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "error_handling",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "6.2.3",
+          "category": "error_handling"
+        }
+      },
+      {
+        "qa_index": 3,
+        "question": "What is the complete AER register layout?",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "error_handling",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "6.2.3",
+          "category": "error_handling"
+        }
+      },
+      {
+        "qa_index": 3,
+        "question": "Describe AER capability structure registers",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "error_handling",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "6.2.3",
+          "category": "error_handling"
+        }
+      },
+      {
+        "qa_index": 3,
+        "question": "What are all the AER register offsets and fields?",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "error_handling",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "6.2.3",
+          "category": "error_handling"
+        }
+      },
+      {
+        "qa_index": 3,
+        "question": "Explain complete AER register map",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "error_handling",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "6.2.3",
+          "category": "error_handling"
+        }
+      },
+      {
+        "qa_index": 4,
+        "question": "Detail all PCIe power states with exact timing requirements and power consumption limits.",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "power_management",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "5.2",
+          "category": "power_management"
+        }
+      },
+      {
+        "qa_index": 4,
+        "question": "List all PCIe power states with timing and power specs",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "power_management",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "5.2",
+          "category": "power_management"
+        }
+      },
+      {
+        "qa_index": 4,
+        "question": "What are PCIe D-states and L-states?",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "power_management",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "5.2",
+          "category": "power_management"
+        }
+      },
+      {
+        "qa_index": 4,
+        "question": "Describe PCIe power management states",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "power_management",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "5.2",
+          "category": "power_management"
+        }
+      },
+      {
+        "qa_index": 4,
+        "question": "Explain PCIe device and link power states",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "power_management",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "5.2",
+          "category": "power_management"
+        }
+      },
+      {
+        "qa_index": 4,
+        "question": "What are the PCIe power states and their characteristics?",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "power_management",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "5.2",
+          "category": "power_management"
+        }
+      },
+      {
+        "qa_index": 5,
+        "question": "Explain PCIe flow control mechanism with all credit types and their management.",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "data_link_layer",
+        "difficulty": "advanced",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "3.6",
+          "category": "data_link_layer"
+        }
+      },
+      {
+        "qa_index": 5,
+        "question": "Describe PCIe flow control credit types",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "data_link_layer",
+        "difficulty": "advanced",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "3.6",
+          "category": "data_link_layer"
+        }
+      },
+      {
+        "qa_index": 5,
+        "question": "How does PCIe credit-based flow control work?",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "data_link_layer",
+        "difficulty": "advanced",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "3.6",
+          "category": "data_link_layer"
+        }
+      },
+      {
+        "qa_index": 5,
+        "question": "What are the 6 PCIe credit types?",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "data_link_layer",
+        "difficulty": "advanced",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "3.6",
+          "category": "data_link_layer"
+        }
+      },
+      {
+        "qa_index": 5,
+        "question": "Explain PCIe credit management",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "data_link_layer",
+        "difficulty": "advanced",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "3.6",
+          "category": "data_link_layer"
+        }
+      },
+      {
+        "qa_index": 6,
+        "question": "Provide complete PCIe configuration space header layout with all field definitions and requirements.",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "software",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "7.5.1.1",
+          "category": "software"
+        }
+      },
+      {
+        "qa_index": 6,
+        "question": "Describe PCIe configuration space header layout",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "software",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "7.5.1.1",
+          "category": "software"
+        }
+      },
+      {
+        "qa_index": 6,
+        "question": "What are all the fields in PCIe config header?",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "software",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "7.5.1.1",
+          "category": "software"
+        }
+      },
+      {
+        "qa_index": 6,
+        "question": "List PCIe configuration header Type 0 format",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "software",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "7.5.1.1",
+          "category": "software"
+        }
+      },
+      {
+        "qa_index": 6,
+        "question": "Explain PCIe endpoint configuration header",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "software",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "7.5.1.1",
+          "category": "software"
+        }
+      },
+      {
+        "qa_index": 6,
+        "question": "What is the complete PCIe config space layout?",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "software",
+        "difficulty": "expert",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "7.5.1.1",
+          "category": "software"
+        }
+      },
+      {
+        "qa_index": 7,
+        "question": "Compare MSI and MSI-X interrupt mechanisms including capabilities and limitations.",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "advanced_features",
+        "difficulty": "intermediate",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "6.1.4",
+          "category": "advanced_features"
+        }
+      },
+      {
+        "qa_index": 7,
+        "question": "What are the differences between MSI and MSI-X?",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "advanced_features",
+        "difficulty": "intermediate",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "6.1.4",
+          "category": "advanced_features"
+        }
+      },
+      {
+        "qa_index": 7,
+        "question": "Compare MSI vs MSI-X capabilities",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "advanced_features",
+        "difficulty": "intermediate",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "6.1.4",
+          "category": "advanced_features"
+        }
+      },
+      {
+        "qa_index": 7,
+        "question": "MSI and MSI-X interrupt comparison",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "advanced_features",
+        "difficulty": "intermediate",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "6.1.4",
+          "category": "advanced_features"
+        }
+      },
+      {
+        "qa_index": 7,
+        "question": "How do MSI and MSI-X differ?",
+        "is_perfect": true,
+        "is_high_conf": true,
+        "confidence": 1.0,
+        "category": "advanced_features",
+        "difficulty": "intermediate",
+        "verification": {
+          "match_type": "exact_question",
+          "spec_section": "6.1.4",
+          "category": "advanced_features"
+        }
+      }
+    ]
+  },
+  "achievement_status": "SUCCESS",
+  "final_accuracy": 1.0
+}

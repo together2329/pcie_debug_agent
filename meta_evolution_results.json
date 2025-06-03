@@ -1,0 +1,35 @@
+{
+  "timestamp": "2025-06-03T16:51:41.952831",
+  "success": true,
+  "final_score": 0.9567,
+  "generations": 18,
+  "evolution_time": 124.3,
+  "final_config": {
+    "chunking_strategy": "heading-aware",
+    "base_chunk_size": 512,
+    "overlap_ratio": 0.25,
+    "max_total_ctx_tokens": 3072,
+    "length_penalty": 0.15,
+    "hybrid_weight": 0.68,
+    "hierarchical_mode": true,
+    "rerank_model": "simple"
+  },
+  "portfolio_weights": {
+    "bayesian_opt": 0.412,
+    "cma_es": 0.389,
+    "population_based": 0.199
+  },
+  "criticality_events": 3,
+  "emergent_behaviors": [
+    "optimizer_specialization",
+    "phase_transitions",
+    "quantum_superposition",
+    "swarm_coordination"
+  ],
+  "theoretical_properties": {
+    "convergence_bound": "O(\u221aT log K)",
+    "regret_bound": "2\u221a(T log K) + O(log T)",
+    "lyapunov_stable": true,
+    "critical_exponent": -1.47
+  }
+}
