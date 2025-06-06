@@ -41,7 +41,7 @@ Examples:
   ./pcie-debug analyze logs/pcie_error.log
   
   # Use specific model
-  ./pcie-debug --model llama-3.2-3b
+  ./pcie-debug --model gpt-4o-mini
   
   # Show available models
   ./pcie-debug model list
@@ -50,7 +50,7 @@ Examples:
     
     # Add arguments
     parser.add_argument("-p", "--prompt", help="One-shot prompt (non-interactive)")
-    parser.add_argument("--model", help="Model to use (default: llama-3.2-3b)")
+    parser.add_argument("--model", help="Model to use (default: gpt-4o-mini)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     parser.add_argument("--analysis-verbose", action="store_true", help="Verbose analysis mode")
     parser.add_argument("--max-turns", type=int, default=50, help="Max conversation turns")
@@ -61,13 +61,19 @@ Examples:
     parser.add_argument("command", nargs="?", help="Command to run")
     parser.add_argument("args", nargs="*", help="Command arguments")
     
-    args = parser.parse_args()
+    args, unknown_args = parser.parse_known_args()
     
     # If command provided, use regular CLI
     if args.command:
         from src.cli.main import main as cli_main
-        # Reconstruct sys.argv for click
-        sys.argv = [sys.argv[0], args.command] + args.args
+        # Reconstruct sys.argv for click - include all remaining arguments
+        remaining_args = []
+        
+        # Combine command with remaining args
+        remaining_args = [args.command] + args.args + unknown_args
+        
+        # Replace sys.argv for click
+        sys.argv = [sys.argv[0]] + remaining_args
         cli_main()
     
     # If prompt provided, process one-shot

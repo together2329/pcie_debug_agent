@@ -11,7 +11,7 @@ class Embedder:
     """텍스트 임베딩 생성기"""
     
     def __init__(self, 
-                 model_name: str = 'sentence-transformers/all-MiniLM-L6-v2',
+                 model_name: Union[str, Any] = 'sentence-transformers/all-MiniLM-L6-v2',
                  device: Optional[str] = None,
                  batch_size: int = 32):
         

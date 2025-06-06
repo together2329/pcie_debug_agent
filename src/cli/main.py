@@ -92,6 +92,13 @@ try:
 except ImportError:
     pass  # vectordb command not available
 
+# Import and add pcie command
+try:
+    from src.cli.commands.pcie_rag import pcie
+    cli.add_command(pcie)
+except ImportError:
+    pass  # pcie command not available
+
 
 def main():
     """Main entry point"""

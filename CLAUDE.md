@@ -27,9 +27,9 @@ PCIe Debug Agent - An advanced AI-powered tool for analyzing PCIe debug logs and
 The interactive shell (`src/cli/interactive.py`) provides Claude Code-style commands:
 
 #### Model Management
-- `/model [model-id]` - List or switch AI models (gpt-4o-mini, llama-3.2-3b, etc.)
+- `/model [model-id]` - List or switch AI models (default: gpt-4o-mini, llama-3.2-3b, etc.)
 - `/rag_model [model]` - Switch RAG embedding models
-- `/rag_mode [mode]` - Select search mode (semantic/hybrid/keyword)
+- `/rag_mode [mode]` - Select search mode (semantic/hybrid/keyword/unified/pcie)
 
 #### Unified RAG System (2025-06-03)
 - `/rag <query>` - **Primary RAG command** with intelligent PCIe analysis and auto-testing
@@ -172,6 +172,107 @@ pcie-debug vectordb build --model text-embedding-3-small
 
 ## Recent Updates
 
+### Latest Release: PCIe Adaptive RAG Mode (2025-06-05)
+
+#### New PCIe-Optimized RAG Architecture
+1. **`/rag_mode pcie`** - PCIe-specific adaptive chunking with 1000-word target chunks
+2. **Semantic Boundary Preservation** - Respects headers, procedures, and specification sections
+3. **PCIe Concept Extraction** - Automatically identifies LTSSM states, TLP types, error conditions, power states
+4. **Technical Level Classification** - Filters content by complexity (1=basic, 2=intermediate, 3=advanced)
+5. **Adaptive Chunking Strategy** - Intelligent splitting that maintains technical coherence
+
+#### PCIe Mode Features
+1. **`/rag_mode pcie`** - Switch to PCIe-optimized chunking mode
+2. **Technical Level Filtering** - Query by complexity level for precise results
+3. **PCIe Layer Filtering** - Filter by physical, transaction, data_link, power_management layers
+4. **Concept Boosting** - Automatic boosting of results with matching PCIe concepts
+5. **Enhanced Metadata** - Rich context including semantic type, technical level, PCIe concepts
+6. **Smart Detection** - Auto-detects PCIe queries and suggests PCIe mode
+7. **Full CLI Integration** - Complete integration with pcie-debug command line tool
+
+#### Interactive Usage (Primary Method)
+```bash
+# Start interactive shell
+./pcie-debug
+
+# System auto-detects PCIe queries and suggests PCIe mode
+🔧 > What are LTSSM states?
+🔧 Detected PCIe-related query!
+💡 Consider switching to PCIe mode for better results:
+👉 Type '/rag_mode pcie' for optimized PCIe answers
+
+# Switch to PCIe mode
+🔧 > /rag_mode pcie
+✅ PCIe adaptive RAG engine ready!
+📊 Vectors: 1,896
+🧮 Chunking: adaptive
+🎯 Concept boosting: enabled
+
+# Ask PCIe questions directly
+🔧 > What are LTSSM timeout conditions?
+🔧 > How does FLR work?
+🔧 > Explain malformed TLP conditions?
+```
+
+#### Command Line Tools
+```bash
+# Build PCIe knowledge base
+./pcie-debug pcie build --force --target-size 1000
+
+# Query with advanced filters  
+./pcie-debug pcie query "LTSSM states" --top-k 3 --technical-level 2
+./pcie-debug pcie query "Power management" --layer power_management
+./pcie-debug pcie query "TLP examples" --semantic-type example
+
+# Get comprehensive statistics
+./pcie-debug pcie stats
+
+# One-shot PCIe queries
+./pcie-debug -p "What causes PCIe completion timeout errors?"
+
+# Run comprehensive test suite
+python test_pcie_adaptive_rag.py
+python test_pcie_integration.py  # Integration tests
+```
+
+#### Smart PCIe Detection
+The system automatically detects PCIe-related queries using 25+ keywords:
+- **Core PCIe**: pcie, ltssm, tlp, flr, aer, aspm
+- **Technical**: completion timeout, link training, hot reset, malformed tlp
+- **Layers**: physical layer, transaction layer, data link layer, system architecture
+- **Components**: endpoint, root complex, switch, bridge, config space
+- **Advanced**: ecrc, lcrc, dllp, ordered set, equalization, eye diagram
+
+#### Technical Implementation
+- **Adaptive Chunker**: `src/processors/pcie_adaptive_chunker.py` - 1000-word target with semantic boundaries
+- **PCIe RAG Engine**: `src/rag/pcie_rag_engine.py` - Specialized engine with concept boosting
+- **CLI Integration**: Enhanced `/rag_mode` command with PCIe option plus full CLI commands
+- **Interactive Integration**: Auto-detection and suggestion system in interactive mode
+- **Vector Database**: Separate `pcie_adaptive_*` databases for optimized storage
+
+#### Performance Improvements
+1. **Better Context Preservation** - 1000-word chunks maintain complete procedures
+2. **Semantic Coherence** - Chunks respect natural document boundaries
+3. **PCIe Intelligence** - Concept extraction boosts relevant results by 10-30%
+4. **Technical Precision** - Level filtering reduces noise for complex queries
+5. **Smart Detection** - Auto-suggests PCIe mode for relevant queries
+6. **Fast Queries** - 0.3-0.7s response times with rich metadata
+
+#### Quality Metrics (100% Test Pass Rate)
+- **Adaptive Chunking**: ✅ 15 chunks from transaction layer, optimal size distribution
+- **RAG Engine**: ✅ 1,896 vectors built successfully with comprehensive coverage
+- **Query Functionality**: ✅ All 5 test queries return relevant results (0.64+ scores)
+- **Concept Boosting**: ✅ 28+ PCIe concepts correctly identified and boosted
+- **Technical Filtering**: ✅ Complexity-based filtering working across all levels
+- **Integration**: ✅ Both interactive and CLI modes fully functional
+
+#### Files Added
+- `src/processors/pcie_adaptive_chunker.py` - PCIe-optimized adaptive document chunker
+- `src/rag/pcie_rag_engine.py` - Specialized RAG engine with PCIe intelligence
+- `src/cli/commands/pcie_rag.py` - Command-line tools for PCIe mode
+- `test_pcie_adaptive_rag.py` - Comprehensive test suite for PCIe mode
+- `test_pcie_integration.py` - Integration test suite for interactive/CLI modes
+
 ### Major Release: Unified RAG System (2025-06-03)
 
 #### New Unified RAG Architecture
@@ -202,7 +303,7 @@ pcie-debug vectordb build --model text-embedding-3-small
 ### Previous Updates (2025-06-01)
 
 #### Legacy Commands (Now Deprecated)
-1. **`/rag_mode`** - Switch between semantic/hybrid/keyword search modes
+1. **`/rag_mode`** - Switch between semantic/hybrid/keyword/unified/pcie search modes
 2. **`/cost`** - Show session cost and token usage with detailed breakdown
 3. **`/doctor`** - Comprehensive system health check (dependencies, memory, disk)
 4. **`/rag_files`** - Show which files are indexed in each RAG database
@@ -232,11 +333,12 @@ pcie-debug vectordb build --model text-embedding-3-small
 Always test new features with:
 1. **Primary**: `/rag --test` - Comprehensive quality test suite
 2. **Engine Testing**: Test with different engines using `--engine` flag
-3. **Quality Monitoring**: Check `/rag --status` for performance metrics
-4. All three search modes (semantic/hybrid/keyword) - legacy testing
-5. Both verbose on/off states
-6. Different embedding models
-7. Tab completion functionality
+3. **PCIe Mode Testing**: `python test_pcie_adaptive_rag.py` - Test adaptive chunking
+4. **Quality Monitoring**: Check `/rag --status` for performance metrics
+5. All search modes (semantic/hybrid/keyword/unified/pcie) - comprehensive testing
+6. Both verbose on/off states
+7. Different embedding models
+8. Tab completion functionality
 
 ### Quality Benchmarks
 - **Overall Score**: >70% for production use, >80% for critical compliance

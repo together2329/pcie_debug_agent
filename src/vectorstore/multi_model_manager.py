@@ -31,7 +31,10 @@ class MultiModelVectorManager:
             "text-embedding-ada-002": self.base_path / "openai_ada_1536d",
             "all-MiniLM-L6-v2": self.base_path / "local_minilm_384d",
             "all-mpnet-base-v2": self.base_path / "local_mpnet_768d",
-            "multi-qa-MiniLM-L6-cos-v1": self.base_path / "local_qa_384d"
+            "multi-qa-MiniLM-L6-cos-v1": self.base_path / "local_qa_384d",
+            # PCIe-specific adaptive chunking paths
+            "pcie_adaptive_text-embedding-3-small": self.base_path / "pcie_adaptive_openai_small_1536d",
+            "pcie_adaptive_all-MiniLM-L6-v2": self.base_path / "pcie_adaptive_local_minilm_384d"
         }
         
     def get_model_path(self, model_name: str) -> Path:

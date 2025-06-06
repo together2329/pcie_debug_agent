@@ -389,7 +389,7 @@ Available Commands:
   /config              Show configuration
   /verbose [on/off]    Toggle verbose analysis mode
   /rag [on/off]        Toggle RAG (Retrieval-Augmented Generation)
-  /rag_mode [mode]     Select RAG search mode (semantic/hybrid/keyword)
+  /rag_mode [mode]     Select RAG search mode (semantic/hybrid/keyword/unified/pcie)
   /rag_status          Show detailed RAG and vector DB status
   /knowledge_base      Show RAG knowledge base content and status
   /kb                  Alias for /knowledge_base
@@ -408,8 +408,15 @@ Direct Usage:
   • Works for commands: /ra[TAB] → /rag, /rag_mode, etc.
   • Works for arguments: /rag_mode [TAB] → semantic, hybrid, keyword
   
+🔧 PCIe Mode (Recommended):
+  /rag_mode pcie       Switch to PCIe-optimized adaptive chunking
+  pcie-debug pcie build --force    Build PCIe knowledge base
+  pcie-debug pcie query "LTSSM states"    Query with filters
+
 Examples:
   > Why is PCIe link training failing?
+  > /rag_mode pcie
+  > What are LTSSM timeout conditions?
   > /model llama-3.2-3b
   > /rag_model text-embedding-3-small
   > /analyze logs/pcie_error.log
@@ -1910,11 +1917,17 @@ Please provide a comprehensive analysis."""
             print("             • Adaptive query routing")
             print("             • Best overall performance")
             print()
-            print("Usage: /rag_mode <semantic|hybrid|keyword|unified>")
+            print("  pcie      - PCIe-optimized adaptive chunking")
+            print("             • 1000-word chunks with semantic boundaries")
+            print("             • PCIe concept extraction and boosting")
+            print("             • Technical level filtering")
+            print("             • Optimized for PCIe specifications")
+            print()
+            print("Usage: /rag_mode <semantic|hybrid|keyword|unified|pcie>")
             return
         
         mode = arg.lower()
-        valid_modes = ['semantic', 'hybrid', 'keyword', 'unified']
+        valid_modes = ['semantic', 'hybrid', 'keyword', 'unified', 'pcie']
         
         if mode not in valid_modes:
             print_error(f"❌ Invalid mode: {mode}")
@@ -1929,6 +1942,10 @@ Please provide a comprehensive analysis."""
         
         # Set the search mode
         self.rag_search_mode = mode
+        
+        # Initialize PCIe mode if selected
+        if mode == 'pcie':
+            self._initialize_pcie_mode()
         
         # Initialize hybrid search engine if needed
         if mode in ['hybrid', 'keyword'] and (not hasattr(self, 'hybrid_engine') or self.hybrid_engine is None):
@@ -1970,6 +1987,118 @@ Please provide a comprehensive analysis."""
             print_info("   🧠 Intelligently combines semantic, keyword, and metadata search")
             print_info("   🎯 Adaptive query routing for optimal results")
             print_info("   ⚡ Best overall performance and accuracy")
+        elif mode == 'pcie':
+            print_info("   🔧 Using PCIe-optimized adaptive chunking")
+            print_info("   📏 1000-word chunks with semantic boundaries")
+            print_info("   🧮 PCIe concept extraction and boosting")
+            print_info("   🎯 Technical level filtering for precision")
+            print_info("   ⚡ Optimized for PCIe specification queries")
+    
+    def do_json_query(self, arg):
+        """Execute a structured JSON query in current RAG mode"""
+        if not arg.strip():
+            print("Usage: /json_query <your question>")
+            print("Example: /json_query What are PCIe LTSSM states?")
+            return
+        
+        if not self.rag_enabled:
+            print_error("❌ RAG not enabled - no vector database available")
+            print_info("   Use '/rag_model <model>' to enable RAG")
+            return
+            
+        try:
+            if self.rag_search_mode == 'pcie' and hasattr(self, 'pcie_rag_engine') and self.pcie_rag_engine:
+                # Use PCIe structured output
+                results = self.pcie_rag_engine.query(
+                    query=arg.strip(),
+                    return_structured=True
+                )
+                
+                # Output JSON
+                import json
+                output = results.to_json(indent=2)
+                print(output)
+                
+            else:
+                print_error("❌ Structured output only available in PCIe mode")
+                print_info("   Switch to PCIe mode: /rag_mode pcie")
+                
+        except Exception as e:
+            print_error(f"❌ Error executing structured query: {e}")
+            if self.verbose:
+                import traceback
+                traceback.print_exc()
+    
+    def _initialize_pcie_mode(self):
+        """Initialize PCIe RAG mode"""
+        try:
+            if not hasattr(self, 'pcie_rag_engine') or self.pcie_rag_engine is None:
+                from src.rag.pcie_rag_engine import PCIeRAGEngine
+                
+                current_model = self.embedding_selector.get_current_model()
+                print_info("🔄 Initializing PCIe adaptive RAG engine...")
+                
+                self.pcie_rag_engine = PCIeRAGEngine(
+                    embedding_model=current_model,
+                    chunk_config={
+                        'target_size': 1000,
+                        'max_size': 1500,
+                        'min_size': 200,
+                        'overlap_size': 200
+                    }
+                )
+                
+                # Check if knowledge base exists
+                if not self.pcie_rag_engine._is_knowledge_base_current():
+                    print_info("📚 Building PCIe knowledge base (this may take a moment)...")
+                    kb_success = self.pcie_rag_engine.build_knowledge_base(
+                        knowledge_base_path="data/knowledge_base",
+                        force_rebuild=False
+                    )
+                    
+                    if not kb_success:
+                        print_error("❌ Failed to build PCIe knowledge base")
+                        print_info("   Run 'pcie-debug pcie build --force' to rebuild")
+                        return False
+                
+                # Get stats
+                stats = self.pcie_rag_engine.get_pcie_mode_stats()
+                print_success("✅ PCIe adaptive RAG engine ready!")
+                total_vectors = stats.get('total_vectors', 'unknown')
+                if isinstance(total_vectors, int):
+                    print_info(f"   📊 Vectors: {total_vectors:,}")
+                else:
+                    print_info(f"   📊 Vectors: {total_vectors}")
+                print_info(f"   🧮 Chunking: {stats.get('chunking_strategy', 'adaptive')}")
+                print_info(f"   🎯 Concept boosting: {'enabled' if stats.get('concept_boosting_enabled') else 'disabled'}")
+                
+                return True
+        except Exception as e:
+            print_error(f"❌ Failed to initialize PCIe mode: {str(e)}")
+            return False
+    
+    def _is_pcie_query(self, query: str) -> bool:
+        """Detect if query is PCIe-related"""
+        pcie_keywords = [
+            'pcie', 'ltssm', 'tlp', 'flr', 'aer', 'aspm', 'completion timeout',
+            'malformed tlp', 'link training', 'power management', 'hot reset',
+            'function level reset', 'advanced error reporting', 'data link layer',
+            'transaction layer', 'physical layer', 'system architecture',
+            'pci express', 'endpoint', 'root complex', 'switch', 'bridge',
+            'config space', 'bar', 'capability', 'extended capability',
+            'ecrc', 'lcrc', 'dllp', 'ordered set', 'equalization',
+            'signal integrity', 'eye diagram', 'compliance pattern'
+        ]
+        
+        query_lower = query.lower()
+        return any(keyword in query_lower for keyword in pcie_keywords)
+    
+    def _suggest_pcie_mode(self, query: str):
+        """Suggest switching to PCIe mode for PCIe queries"""
+        print_info("🔧 Detected PCIe-related query!")
+        print_info("   💡 Consider switching to PCIe mode for better results:")
+        print_info("   👉 Type '/rag_mode pcie' for optimized PCIe answers")
+        print("")
     
     def _perform_search_with_mode(self, rag_query, query_embedding=None):
         """Perform search using the selected RAG mode"""
@@ -2015,6 +2144,87 @@ Please provide a comprehensive analysis."""
                 )
                 
                 return rag_result
+            
+            elif self.rag_search_mode == 'pcie':
+                # Use PCIe RAG engine
+                if not hasattr(self, 'pcie_rag_engine') or self.pcie_rag_engine is None:
+                    # Initialize PCIe RAG engine
+                    from src.rag.pcie_rag_engine import PCIeRAGEngine
+                    
+                    current_model = self.embedding_selector.get_current_model()
+                    print("🔄 Initializing PCIe adaptive RAG engine...")
+                    
+                    self.pcie_rag_engine = PCIeRAGEngine(
+                        embedding_model=current_model,
+                        chunk_config={
+                            'target_size': 1000,
+                            'max_size': 1500,
+                            'min_size': 200,
+                            'overlap_size': 200
+                        }
+                    )
+                    
+                    # Build knowledge base if needed
+                    kb_success = self.pcie_rag_engine.build_knowledge_base(
+                        knowledge_base_path="data/knowledge_base",
+                        force_rebuild=False
+                    )
+                    
+                    if not kb_success:
+                        print_error("❌ Failed to build PCIe knowledge base")
+                        print_info("   Falling back to semantic search")
+                        self.rag_search_mode = 'semantic'
+                        return self.rag_engine.query(rag_query)
+                    
+                    print_success("✅ PCIe adaptive RAG engine initialized")
+                
+                # Execute PCIe query
+                pcie_results = self.pcie_rag_engine.query(
+                    query=rag_query.query,
+                    top_k=rag_query.context_window
+                )
+                
+                # Convert PCIe results to standard RAG result format
+                from src.rag.enhanced_rag_engine import RAGResponse
+                
+                if pcie_results:
+                    # Convert first result to main answer
+                    best_result = pcie_results[0]
+                    
+                    # Build sources from all results
+                    sources = []
+                    for result in pcie_results:
+                        source = {
+                            'content': result.content,
+                            'metadata': result.metadata,
+                            'score': result.score,
+                            'pcie_layer': result.metadata.get('pcie_layer', 'general'),
+                            'technical_level': result.technical_level,
+                            'semantic_type': result.semantic_type,
+                            'section': result.source_section
+                        }
+                        sources.append(source)
+                    
+                    rag_result = RAGResponse(
+                        answer=best_result.content,  # Use best match as answer
+                        sources=sources,
+                        confidence=best_result.score,
+                        metadata={
+                            'mode': 'pcie_adaptive',
+                            'chunking_strategy': 'adaptive',
+                            'total_results': len(pcie_results)
+                        }
+                    )
+                    
+                    return rag_result
+                else:
+                    # No results found
+                    return RAGResponse(
+                        answer="No relevant PCIe information found.",
+                        sources=[],
+                        confidence=0.0,
+                        metadata={'mode': 'pcie_adaptive', 'error': 'no_results'}
+                    )
             
             elif self.rag_search_mode in ['hybrid', 'keyword']:
                 # Use hybrid search engine
@@ -2641,6 +2851,10 @@ Be concise but thorough in your technical analysis."""
             # Handle slash commands
             super().default(line)
             return
+        
+        # Check if this looks like a PCIe query and suggest PCIe mode
+        if self._is_pcie_query(line) and getattr(self, 'rag_search_mode', 'semantic') != 'pcie':
+            self._suggest_pcie_mode(line)
         
         # Use Unified RAG for regular queries
         if hasattr(self, 'unified_rag') and self.unified_rag:
